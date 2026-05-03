@@ -39,3 +39,15 @@ Thumbs.db
 
 # Hatch / build
 .hatch/
+
+# Notes and local Agent instructions
+Notes.md
+
+# External/raw datasets
+data/raw/
+data/dns/
+external/
+
+#Prelim scripts
+mini_tests.py
+error_calcs.py
