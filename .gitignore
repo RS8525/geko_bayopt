@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Processed DNS cache (regenerated automatically)
+data/processed/
+
+# Fluent run artifacts
+results/experiments/*/runs/
+*.trn
+*.cas.h5.bak
+*.dat.h5
+
+# Optimizer checkpoints (keep metadata.csv, not pkl)
+results/experiments/*/optimizer.pkl
+
+# Results, dont save raw and preliminary results
+results/experiments/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Hatch / build
+.hatch/

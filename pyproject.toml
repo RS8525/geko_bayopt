@@ -1,0 +1,70 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "geko-bayesopt"
+version = "0.1.0"
+description = "Bayesian optimization of ANSYS Fluent GEKO turbulence model coefficients using DNS reference data"
+requires-python = ">=3.10"
+
+dependencies = [
+    # Fluent automation (pyfluent)
+    "ansys-fluent-core>=0.20",
+
+    # DNS data parsing — reads OpenFOAM field format without requiring OpenFOAM install
+    "fluidfoam>=0.2",
+
+    # Numerics and interpolation (LinearNDInterpolator for DNS → RANS grid)
+    "numpy>=1.24",
+    "scipy>=1.11",
+
+    # Bayesian optimization — upgrade to botorch when adding >2 parameters
+    "scikit-optimize>=0.9",
+
+    # Config validation
+    "pydantic>=2.0",
+
+    # Run metadata storage and field snapshot persistence
+    "pandas>=2.0",
+    "h5py>=3.9",
+
+    # Profile plots and objective landscape visualization
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",       # replaces black + flake8
+    "mypy>=1.0",
+]
+
+# Uncomment when moving to multi-parameter tuning or data-driven ML extension
+# ml = [
+#     "torch>=2.0",
+#     "botorch>=0.9",
+#     "gpytorch>=1.11",
+# ]
+
+[project.scripts]
+geko-opt = "geko_bayesopt.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/geko_bayesopt"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]   # pycodestyle, pyflakes, isort, pyupgrade
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true     # ansys-fluent-core type stubs are incomplete
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
