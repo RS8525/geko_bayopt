@@ -43,12 +43,33 @@ field_parameters = ["cp", "Ux", "Uy"]
 # Load DNS
 # -------------------------------------------------------------------------
 
-dns_coords, dns_fields = getData(CaseName="alph10-9-3036")
+test_case = 0
 
-field_calc = FieldErrorCalculator(
-    dns_coords=dns_coords,
-    dns_fields=dns_fields,
-)
+if test_case == 1:
+    dns_coords, dns_fields = getData(CaseName="alph10-9-3036")
+
+    field_calc = FieldErrorCalculator(
+                        dns_coords=dns_coords,
+                        dns_fields=dns_fields)
+
+if test_case == 0:
+    from geko_bayesopt.ansys.periodic_hill.runner import run_geko_trial
+
+    parameter = {"geko_csep": 1.0}
+
+    outputs = run_geko_trial(
+                geko_params=parameter,
+                session=session,
+                base_case=base_case,
+                reinitialize=False)
+                                        
+
+    sim_coords, sim_fields = getSimulationData(outputs["ascii"])
+
+    field_calc = FieldErrorCalculator(
+                         dns_coords=sim_coords,
+                         dns_fields=sim_fields)
+
 
 
 # -------------------------------------------------------------------------
