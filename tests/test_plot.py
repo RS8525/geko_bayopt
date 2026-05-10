@@ -63,7 +63,7 @@ def plot_and_save_simulation_data(sim_file_path, output_dir):
         output_dir (str): The directory where the plots will be saved.
     """
     # Load simulation data
-    sim_data = np.genfromtxt(sim_file_path, dtype=float, skip_header=1, delimiter=',')
+    sim_data = np.genfromtxt(sim_file_path, dtype=float, skip_header=1, delimiter=None)
     sim_coords = sim_data[:, 1:3]  # Columns 1 and 2 for coordinates
     sim_col_2 = sim_data[:, 3]     # This might need to be 2 or 3 depending on CSV
     sim_col_5 = sim_data[:, 5]     # Column with index 5
@@ -99,7 +99,8 @@ if __name__ == "__main__":
     plot_dns_data("alph10-9-3036", output_directory)
     plt.close('all')  # Close DNS plots before plotting simulation data
     
-    sim_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "experiments", "periodic_hills", "periodic_hill_2d_alpha_1.0.msh_solved_csep_1.75"))
+    sim_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src", "geko_bayesopt", "ansys", "outputs", "alpha1.0_Re5600_Csep1.678009572655402.ascii"))
     plot_and_save_simulation_data(sim_file, output_directory)
     
     plt.show()  # Keep the DNS plots open at the end
+

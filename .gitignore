@@ -17,7 +17,7 @@ env/
 data/processed/
 
 # Fluent run artifacts
-src/geco_bayesopt/ansys/outputs/
+src/geko_bayesopt/ansys/outputs/
 results/experiments/*/runs/
 *.trn
 *.cas.h5
