@@ -10,9 +10,19 @@ def getData(CaseName=str, **kwargs) ->  tuple[np.ndarray, dict[str, np.ndarray]]
     """
 
 
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    dns_path = os.path.join(base_dir, "data", "dns", "periodic_hills", "pehill-29-cases-DNS", CaseName, "mean_files.dat")
+    base_dir = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..")
+    )
 
+    dns_path = os.path.join(
+        base_dir,
+        "data",
+        "dns",
+        "periodic_hills",
+        "pehill-29-cases-DNS",
+        CaseName,
+        "mean_files.dat",
+    )
 
     # Assuming .dat output from Fluent matching [node, x, y, u, v, p]
     data = np.genfromtxt(dns_path, dtype=float, skip_header= 0, delimiter = None)

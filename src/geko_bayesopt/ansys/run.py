@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from periodic_hill import CaseConfig, MeshConfig, run_case
+from .periodic_hill import CaseConfig, MeshConfig, run_case
 
 # ---- Paths -----------------------------------------------------------------
 DATA_DIR = Path(__file__).resolve().parent / "outputs"

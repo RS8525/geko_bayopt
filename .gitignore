@@ -17,9 +17,10 @@ env/
 data/processed/
 
 # Fluent run artifacts
+src/geco_bayesopt/ansys/outputs/
 results/experiments/*/runs/
 *.trn
-*.cas.h5.bak
+*.cas.h5
 *.dat.h5
 
 # Optimizer checkpoints (keep metadata.csv, not pkl)
