@@ -59,8 +59,8 @@ if test_case == 0:
 
     outputs = run_geko_trial(
                 geko_params=parameter,
-                session=session,
-                base_case=base_case,
+                session=run_case(CASE, MESH, DATA_DIR),
+                base_case=CASE,
                 reinitialize=False)
                                         
 
