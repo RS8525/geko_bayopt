@@ -167,10 +167,10 @@ class PeriodicHillSolver:
             file_name=str(out["case_solved"]),
             file_type="case",
         )
-        self._solver.settings.file.write(
-            file_name=str(out["data_solved"]),
-            file_type="data",
-        )
+        # self._solver.settings.file.write(
+        #     file_name=str(out["data_solved"]),
+        #     file_type="data",
+        # )
 
         # Export ASCII
         var_string = " ".join(self.EXPORT_VARIABLES) + " ()"
