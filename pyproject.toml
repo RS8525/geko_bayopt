@@ -21,6 +21,7 @@ dependencies = [
 
     # Bayesian optimization — upgrade to botorch when adding >2 parameters
     "scikit-optimize>=0.9",
+    "bayesian-optimization>=3.2.1",  # Added bayes_opt library
 
     # Config validation
     "pydantic>=2.0",
