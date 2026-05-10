@@ -43,10 +43,7 @@ field_parameters = ["cp", "Ux", "Uy"]
 # Load DNS
 # -------------------------------------------------------------------------
 
-dns_coords, dns_fields = getData(
-    CaseName="alph10-9-3036",
-    data_dir=DATA_DIR,
-)
+dns_coords, dns_fields = getData(CaseName="alph10-9-3036")
 
 field_calc = FieldErrorCalculator(
     dns_coords=dns_coords,
