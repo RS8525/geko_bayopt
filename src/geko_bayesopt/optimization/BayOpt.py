@@ -1,3 +1,4 @@
+import os
 from bayes_opt import BayesianOptimization
 from bayes_opt import acquisition
 from geko_bayesopt.ansys.run import CASE, MESH, DATA_DIR
@@ -7,6 +8,7 @@ from geko_bayesopt.utils.load_dns_periodic_hill import getData
 from geko_bayesopt.utils.utilities import objective_geko
 from geko_bayesopt.utils.utilities import get_sobol_sampling_points
 from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
+from geko_bayesopt.utils.utilities import plot_and_save_BayOpt
 
 # -------------------------------------------------------------------------
 # Bayesian optimization settings
@@ -77,6 +79,9 @@ if test_case == 0:
 # -------------------------------------------------------------------------
 history = []
 
+# Very optimistic stopping criterion, just for testing purposes. In practice, it should be set to a more reasonable value or removed.
+break_when =  1e-8
+
 with open_session(CASE, MESH, DATA_DIR) as session:
     for i in range(itmax):
 
@@ -110,6 +115,11 @@ with open_session(CASE, MESH, DATA_DIR) as session:
         print(f"Params: {next_point_to_probe}")
         print(f"Target: {target}")
 
+        # Change-in-Function-Value based stopping criterion
+        if i > 0:
+            if abs(target - history[i-1]["error"]) < break_when:
+                print(f"Breaking optimization loop at iteration {i} due to target change below threshold.")
+                break
 
 print("\n=== Optimization history ===")
 print(f"{'Iteration':>10} | {'geko_csep':>12} | {'Error / target':>14}")
@@ -129,6 +139,12 @@ best_csep = float(best["params"]["geko_csep"])
 print("\n=== Best result ===")
 print(f"Best geko_csep: {best_csep:.6f}")
 print(f"Best score:     {best_score:.8f}")
+
+# Should not produce errors, see successfull implementation in visualization_test.py
+plot_and_save_BayOpt(history,
+                    output_dir=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "experiments", "bayesian_optimization")),
+                    number_of_sobol_sampling_points=number_of_sobol_sampling_points,
+                    )
 
 
 

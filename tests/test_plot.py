@@ -95,6 +95,7 @@ def plot_and_save_simulation_data(sim_file_path, output_dir):
     plt.savefig(os.path.join(output_dir, 'simulation_column_5.png'))
     plt.close()
 
+
 if __name__ == "__main__":
     # Example usage
     output_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "experiments", "periodic_hills"))
