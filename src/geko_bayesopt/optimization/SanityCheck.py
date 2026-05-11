@@ -5,7 +5,7 @@ from geko_bayesopt.ansys.run import CASE, MESH, DATA_DIR
 from geko_bayesopt.ansys.periodic_hill.runner import open_session, run_case
 from geko_bayesopt.objective.integral_and_field_error import FieldErrorCalculator
 from geko_bayesopt.utils.load_dns_periodic_hill import getData
-from geko_bayesopt.utils.utilities import objective_geko
+from geko_bayesopt.objective.objective import objective_geko
 from geko_bayesopt.utils.utilities import get_sobol_sampling_points
 from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 from geko_bayesopt.utils.utilities import plot_and_save_BayOpt
@@ -139,7 +139,7 @@ print(f"Best geko_csep: {best_csep:.6f}")
 print(f"Best score:     {best_score:.8f}")
 
 # Should not produce errors, see successfull implementation in visualization_test.py
-Do_you_have_balls_to_plot = False
+Do_you_have_balls_to_plot = True
 
 if Do_you_have_balls_to_plot:
     plot_and_save_BayOpt(history,

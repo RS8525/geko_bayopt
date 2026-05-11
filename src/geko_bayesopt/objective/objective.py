@@ -1,12 +1,8 @@
 import numpy as np
 
 from geko_bayesopt.ansys.periodic_hill.runner import run_geko_trial
-from geko_bayesopt.objective.GEDCP import gedcp
 from geko_bayesopt.objective.integral_and_field_error import FieldErrorCalculator
 from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
-
-import os
-import matplotlib.pyplot as plt 
 
 
 GEKO_DEFAULTS = {
@@ -48,7 +44,7 @@ def objective_geko(
         geko_params=geko_params,
         session=session,
         base_case=base_case,
-        reinitialize=False,
+        reinitialize=True,
     )
     sim_coords, sim_fields = getSimulationData(outputs["ascii"])
 
@@ -88,6 +84,6 @@ def objective_geko(
     if integral_error is not None:
         total_error += lambdas["integral"] * integral_error
 
-    score = -total_error * (1.0 + lambdas["preference"] * preference_error)
+    score = -1.0 * total_error * (1.0 + lambdas["preference"] * preference_error)
 
     return float(score)
