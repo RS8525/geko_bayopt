@@ -1,7 +1,7 @@
 ﻿import os
 import numpy as np
 import pytest
-from geko_bayesopt.objective.field_error import FieldErrorCalculator
+from geko_bayesopt.objective.integral_and_field_error import FieldErrorCalculator
 
 
 

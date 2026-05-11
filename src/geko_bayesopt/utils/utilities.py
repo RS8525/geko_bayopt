@@ -4,7 +4,7 @@ import numpy as np
 
 from geko_bayesopt.ansys.periodic_hill.runner import run_geko_trial
 from geko_bayesopt.objective.GEDCP import gedcp
-from geko_bayesopt.objective.field_error import FieldErrorCalculator
+from geko_bayesopt.objective.integral_and_field_error import FieldErrorCalculator
 from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 
 def get_sobol_sampling_points(sobol_sampling_points, pbounds):

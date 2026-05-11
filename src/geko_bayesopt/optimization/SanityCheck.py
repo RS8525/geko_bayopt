@@ -3,7 +3,7 @@ from bayes_opt import BayesianOptimization
 from bayes_opt import acquisition
 from geko_bayesopt.ansys.run import CASE, MESH, DATA_DIR
 from geko_bayesopt.ansys.periodic_hill.runner import open_session, run_case
-from geko_bayesopt.objective.field_error import FieldErrorCalculator
+from geko_bayesopt.objective.integral_and_field_error import FieldErrorCalculator
 from geko_bayesopt.utils.load_dns_periodic_hill import getData
 from geko_bayesopt.utils.utilities import objective_geko
 from geko_bayesopt.utils.utilities import get_sobol_sampling_points

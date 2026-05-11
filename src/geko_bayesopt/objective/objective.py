@@ -2,11 +2,12 @@ import numpy as np
 
 from geko_bayesopt.ansys.periodic_hill.runner import run_geko_trial
 from geko_bayesopt.objective.GEDCP import gedcp
-from geko_bayesopt.objective.field_error import FieldErrorCalculator
+from geko_bayesopt.objective.integral_and_field_error import FieldErrorCalculator
 from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 
 import os
 import matplotlib.pyplot as plt 
+
 
 GEKO_DEFAULTS = {
     "geko_csep": 1.75,
@@ -25,35 +26,6 @@ LAMBDAS = {
 }
 
 
-#from __future__ import annotations
-
-import numpy as np
-
-
-def coefficient_preference(
-    coef_dict: dict[str, float],
-    coef_default_dict: dict[str, float],
-) -> float:
-    """Default coefficient preference term.
-
-    p = mean(|c_default - c_current| / |c_default|)
-    """
-    if not coef_dict:
-        return 0.0
-
-    penalties = []
-
-    for name, value in coef_dict.items():
-
-        default = coef_default_dict[name]
-
-        if default == 0.0:
-            penalties.append(abs(value - default))
-        else:
-            penalties.append(abs((default - value) / default))
-
-    return float(np.mean(penalties))
-
 def objective_geko(
     geko_params: dict[str, float],
     *,
@@ -71,17 +43,18 @@ def objective_geko(
     if lambdas is None:
         lambdas = LAMBDAS
 
+    # Run the GEKO trial with the given parameters and retrieve simulation outputs
     outputs = run_geko_trial(
         geko_params=geko_params,
         session=session,
         base_case=base_case,
         reinitialize=False,
     )
-
     sim_coords, sim_fields = getSimulationData(outputs["ascii"])
 
+    # Compute field error by comparing simulation results to DNS reference data
+    # TODO: Check what is the field_names thing
     field_error = 0.0
-
     for field_name in field_names:
         field_error += field_calc.calculate_error(
             sim_coords=sim_coords,
@@ -89,22 +62,32 @@ def objective_geko(
             field_name=field_name,
         )
 
-    # No integral error yet
+    # Probably not used in the current implementation
     integral_error = None
 
-    # Eq. (9): default coefficient preference term
-    preference = coefficient_preference(
-        coef_dict=geko_params,
-        coef_default_dict=GEKO_DEFAULTS,
-    )
+    # Compute preference error based on deviation from default coefficients
+    penalties = []
+    for name, value in geko_params.items():
 
-    score = gedcp(
-        field_error=field_error,
-        integral_error=integral_error,
-        coefficient_preference=preference,
-        lambda_field=lambdas["field"],
-        lambda_integral=lambdas["integral"],
-        lambda_preference=lambdas["preference"],
-    )
+        default = GEKO_DEFAULTS[name]
+
+        if default == 0.0:
+            penalties.append(abs(value - default))
+        else:
+            penalties.append(abs((default - value) / default))
+    
+    preference_error = float(np.mean(penalties))
+
+
+    # Combine errors into a single score for optimization.
+    total_error = 0.0
+
+    if field_error is not None:
+        total_error += lambdas["field"] * field_error
+
+    if integral_error is not None:
+        total_error += lambdas["integral"] * integral_error
+
+    score = -total_error * (1.0 + lambdas["preference"] * preference_error)
 
     return float(score)
