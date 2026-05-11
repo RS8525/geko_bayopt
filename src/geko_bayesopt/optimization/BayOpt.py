@@ -1,12 +1,12 @@
 from bayes_opt import BayesianOptimization
 from bayes_opt import acquisition
 from geko_bayesopt.ansys.run import CASE, MESH, DATA_DIR
-from geko_bayesopt.ansys.periodic_hill.runner import open_session
+from geko_bayesopt.ansys.periodic_hill.runner import open_session, run_case
 from geko_bayesopt.objective.field_error import FieldErrorCalculator
 from geko_bayesopt.utils.load_dns_periodic_hill import getData
 from geko_bayesopt.utils.utilities import objective_geko
 from geko_bayesopt.utils.utilities import get_sobol_sampling_points
-
+from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 
 # -------------------------------------------------------------------------
 # Bayesian optimization settings
@@ -42,7 +42,7 @@ field_parameters = ["cp", "Ux", "Uy"]
 # -------------------------------------------------------------------------
 # Load DNS
 # -------------------------------------------------------------------------
-
+#Specify if you want ro run it with correct DNS data (problem: is not scaled) or with a "fake" DNS data with a known CSEP(0.8870889544487). Notice that not setting lambda_p=0 will make Csep pushed to the default value
 test_case = 0
 
 if test_case == 1:
@@ -53,18 +53,18 @@ if test_case == 1:
                         dns_fields=dns_fields)
 
 if test_case == 0:
-    from geko_bayesopt.ansys.periodic_hill.runner import run_geko_trial
+    from geko_bayesopt.ansys.periodic_hill.runner import run_case
 
-    parameter = {"geko_csep": 1.0}
+    from pathlib import Path
 
-    outputs = run_geko_trial(
-                geko_params=parameter,
-                session=run_case(CASE, MESH, DATA_DIR),
-                base_case=CASE,
-                reinitialize=False)
+    BASE_DIR = Path(__file__).resolve().parent.parent
+
+    DNS_CSEP0887 = getSimulationData(
+        BASE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.8870889544487.ascii"
+    )
+    sim_coords,sim_fields=DNS_CSEP0887
                                         
 
-    sim_coords, sim_fields = getSimulationData(outputs["ascii"])
 
     field_calc = FieldErrorCalculator(
                          dns_coords=sim_coords,

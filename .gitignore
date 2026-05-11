@@ -22,7 +22,8 @@ results/experiments/*/runs/
 *.trn
 *.cas.h5
 *.dat.h5
-
+*.ascii
+!src/geko_bayesopt/ansys/outputs/alpha1.0_Re5600_Csep0.8870889544487.ascii
 # Optimizer checkpoints (keep metadata.csv, not pkl)
 results/experiments/*/optimizer.pkl
 
