@@ -28,10 +28,11 @@ def plot_dns_data(case_name, output_dir):
     # Extract columns
     coords = data[:, :2]  # First two columns for coordinates
     x_coords, y_coords = coords[:, 0], coords[:, 1]
-    col_2 = data[:, 2]   # Column with index 2
-    col_5 = data[:, 5]   # Column with index 5
+    col_2 = data[:, 2]           # Column with index 2
+    col_5 = data[:, 5]           # Column with index 5
+    col_5 = col_5 - col_5[-1]    # Normalize pressure
 
-    # Plot column 2
+    # Plot column 2 (Ux)
     plt.figure(figsize=(10, 6))
     plt.scatter(x_coords, y_coords, c=col_2, cmap='viridis', label='Column 2', alpha=0.7)
     plt.colorbar(label='Column 2 Values')
@@ -43,7 +44,7 @@ def plot_dns_data(case_name, output_dir):
     plt.savefig(os.path.join(output_dir, f'dns_{case_name}_column_2.png'))
     plt.show(block=False)  # Don't block execution
 
-    # Plot column 5
+    # Plot column 5 (pressure)
     plt.figure(figsize=(10, 6))
     plt.scatter(x_coords, y_coords, c=col_5, cmap='plasma', label='Column 5', alpha=0.7)
     plt.colorbar(label='Column 5 Values')
@@ -64,14 +65,15 @@ def plot_and_save_simulation_data(sim_file_path, output_dir):
     """
     # Load simulation data
     sim_data = np.genfromtxt(sim_file_path, dtype=float, skip_header=1, delimiter=None)
-    sim_coords = sim_data[:, 1:3]  # Columns 1 and 2 for coordinates
-    sim_col_2 = sim_data[:, 3]     # This might need to be 2 or 3 depending on CSV
-    sim_col_5 = sim_data[:, 5]     # Column with index 5
+    sim_coords = sim_data[:, 1:3]           # Columns 1 and 2 for coordinates
+    sim_col_2 = sim_data[:, 3]              # This might need to be 2 or 3 depending on CSV
+    sim_col_5 = sim_data[:, 5]              # Column with index 5
+    sim_col_5 = sim_col_5 - sim_col_5[-1]   # Normalize pressure 
 
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    # Plot and save column 2
+    # Plot and save column 2 (Ux)
     plt.figure(figsize=(10, 6))
     scatter = plt.scatter(sim_coords[:, 0], sim_coords[:, 1], c=sim_col_2, cmap='viridis', alpha=0.7)
     plt.colorbar(scatter, label='Simulation Column 2 Values')
@@ -82,7 +84,7 @@ def plot_and_save_simulation_data(sim_file_path, output_dir):
     plt.savefig(os.path.join(output_dir, 'simulation_column_2.png'))
     plt.close()
 
-    # Plot and save column 5
+    # Plot and save column 5 (pressure)
     plt.figure(figsize=(10, 6))
     scatter = plt.scatter(sim_coords[:, 0], sim_coords[:, 1], c=sim_col_5, cmap='plasma', alpha=0.7)
     plt.colorbar(scatter, label='Simulation Column 5 Values')
