@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Processed DNS cache (regenerated automatically)
+data/processed/
+
+# Fluent run artifacts
+src/geko_bayesopt/ansys/outputs/
+results/experiments/*/runs/
+*.trn
+*.cas.h5
+*.dat.h5
+*.ascii
+!src/geko_bayesopt/ansys/outputs/alpha1.0_Re5600_Csep0.8870889544487.ascii
+# Optimizer checkpoints (keep metadata.csv, not pkl)
+results/experiments/*/optimizer.pkl
+
+# Results, dont save raw and preliminary results
+results/experiments/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Hatch / build
+.hatch/
+
+# Notes and local Agent instructions
+Notes.md
+
+# External/raw datasets
+data/raw/
+data/dns/
+external/
+
+#Prelim scripts
+mini_tests.py
+error_calcs.py
