@@ -49,3 +49,41 @@ def getSimulationData(sim_path: str | Path) -> tuple[np.ndarray, dict[str, np.nd
     }
 
     return sim_coords, sim_fields
+
+
+
+def getSurfaceFieldData(surface_path: str | Path) -> tuple[np.ndarray, dict[str, np.ndarray]] | None:
+    """
+    Reads Fluent surface ASCII output data.
+
+    Currently expected format for x-wall-shear export:
+        nodenumber x-coordinate y-coordinate x-wall-shear
+
+    Returns:
+        None if the file does not exist.
+
+        Otherwise:
+            surface_coords: array with x and y coordinates, shape (N, 2)
+            surface_fields: dictionary with surface fields, e.g. {"x_wall_shear": array}
+    """
+
+    surface_path = Path(surface_path)
+
+    if not surface_path.is_file():
+        print(f"[surface loader] Surface field file not found, skipping: {surface_path}")
+        return None
+
+    data = np.genfromtxt(
+        surface_path,
+        dtype=float,
+        skip_header=1,
+        delimiter=None,
+    )
+
+    surface_coords = data[:, 1:3]
+
+    surface_fields = {
+        "x_wall_shear": data[:, 3],
+    }
+
+    return surface_coords, surface_fields

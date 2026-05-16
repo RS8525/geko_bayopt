@@ -177,7 +177,15 @@ class PeriodicHillSolver:
         self._solver.execute_tui(
             f'/file/export/ascii "{out["ascii"]}" () no {var_string} no'
         )
+
+        # self._solver.execute_tui(
+        #     f'/file/export/ascii "{out["wall_shear"]}" '
+        #     f'({self.case.zone_bottom}) no x-wall-shear () no'
+        # )
+
+
         print(f"[solver] Trial {trial_case.case_id} done. ASCII at {out['ascii']}")
+        # print(f"[solver] Wall shear export at {out['wall_shear']}")
         return out
 
     def close(self) -> None:
@@ -240,6 +248,7 @@ class PeriodicHillSolver:
             "case_solved": self.data_dir / f"{cid}_solved.cas.h5",
             "data_solved": self.data_dir / f"{cid}_solved.dat.h5",
             "ascii": self.data_dir / f"{cid}.ascii",
+            #"wall_shear": self.data_dir / f"{cid}_wall_shear.ascii",
         }
 
     def _launch(self):

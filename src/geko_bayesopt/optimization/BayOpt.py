@@ -12,15 +12,15 @@ from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 # Bayesian optimization settings
 # -------------------------------------------------------------------------
 
-acq = acquisition.UpperConfidenceBound(kappa=2.5)
+acq = acquisition.UpperConfidenceBound(kappa=2)
 
 # Parameter bounds
 pbounds = {
-    "geko_csep": (0.5, 2.5),
+    "geko_csep": (0.7, 2.5),
 }
 
-number_of_sobol_sampling_points = 8
-itmax = 5 * number_of_sobol_sampling_points
+number_of_sobol_sampling_points = 10
+itmax = 3 * number_of_sobol_sampling_points
 
 sobol_sampling_points = get_sobol_sampling_points(
     number_of_sobol_sampling_points,
@@ -35,7 +35,7 @@ optimizer = BayesianOptimization(
     random_state=1,
 )
 
-lambdas={"field": 1.0, "integral": 1.0,"preference": 0.5,}
+lambdas={"field": 1.0, "integral": 1.0,"preference": 0.5}
 
 field_parameters = ["cp", "Ux", "Uy"]
 
@@ -48,9 +48,17 @@ test_case = 0
 if test_case == 1:
     dns_coords, dns_fields = getData(CaseName="alph10-9-3036")
 
+    field_weights = {
+        "Ux": 1.0,
+        "Uy": 1.0,
+        "cp": 1.0,
+    }
+
     field_calc = FieldErrorCalculator(
-                        dns_coords=dns_coords,
-                        dns_fields=dns_fields)
+        dns_coords=dns_coords,
+        dns_fields=dns_fields,
+        field_weights=field_weights
+    )
 
 if test_case == 0:
     from geko_bayesopt.ansys.periodic_hill.runner import run_case
@@ -60,16 +68,21 @@ if test_case == 0:
     BASE_DIR = Path(__file__).resolve().parent.parent
 
     DNS_CSEP0887 = getSimulationData(
-        BASE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.8870889544487.ascii"
+        BASE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.8870889544486.ascii"
     )
     sim_coords,sim_fields=DNS_CSEP0887
-                                        
 
+    field_weights = {
+        "Ux": 1.0,
+        "Uy": 1.0,
+        "cp": 1.0,
+    }
 
     field_calc = FieldErrorCalculator(
-                         dns_coords=sim_coords,
-                         dns_fields=sim_fields)
-
+        dns_coords=sim_coords,
+        dns_fields=sim_fields,
+        field_weights=field_weights
+    )                                
 
 
 # -------------------------------------------------------------------------
@@ -129,67 +142,4 @@ best_csep = float(best["params"]["geko_csep"])
 print("\n=== Best result ===")
 print(f"Best geko_csep: {best_csep:.6f}")
 print(f"Best score:     {best_score:.8f}")
-
-
-
-
-
-
-
-
-
-
-
-#-----------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-# # Imports the Bayesian Optimizer class
-# from bayes_opt import BayesianOptimization
-
-# # Imports the acquisition function, which will be specified as a parameter of the optimizer
-# from bayes_opt import acquisition
-# acq = acquisition.UpperConfidenceBound(kappa=2.5)
-# # TODO: Check aquisition functions and their parameters
-
-
-# from geko_bayesopt.optimization.utilities import objective_geko_csep, get_sobol_sampling_points
-
-
-# # Parameter Space
-# pbounds = {"geko_csep": (0.5, 2.5)} 
-
-# number_of_sobol_sampling_points = 8 # Potency of 2 needed?
-# itmax = 3*number_of_sobol_sampling_points
-# sobol_sampling_points = get_sobol_sampling_points(number_of_sobol_sampling_points, pbounds)
-
-
-
-# #NOTE: Initialization of optimizer with f = None is (probably) unncessaryly complicated, as the function can be specified directly in the constructor by an ANSYS call.
-# #BUT: I was trying to tackle the general case.
-# optimizer = BayesianOptimization(
-#     f=None,
-#     acquisition_function=acq,
-#     pbounds=pbounds,
-#     verbose=2, # verbose = 1 prints only when a maximum is observed, verbose = 0 is silent
-#     random_state=1, # state for reproducibility
-# )
-
-# for i in range(itmax):
-
-#     # next_point_to_probe is delivered as a dictionary {'c_sep': 1.5}
-    
-#     if i < number_of_sobol_sampling_points:
-#         next_point_to_probe = sobol_sampling_points[i]
-#         target = objective_geko_csep(geko_params=next_point_to_probe)
-#         optimizer.register(
-#             params=next_point_to_probe,
-#             target=target,
-#         )
-#     else:
-#         next_point_to_probe = optimizer.suggest()
-#         target = objective_geko_csep(geko_params=next_point_to_probe)
-#         optimizer.register(
-#             params=next_point_to_probe,
-#             target=target,
-#         )  
-
 

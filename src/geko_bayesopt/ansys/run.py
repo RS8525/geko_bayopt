@@ -17,7 +17,7 @@ DATA_DIR = Path(__file__).resolve().parent / "outputs"
 # ---- Case ------------------------------------------------------------------
 CASE = CaseConfig(
     alpha=1.0,
-    hill_height=28.0,
+    hill_height=0.028,
     ly_over_h=3.036,
     fluid_density=1.0,
     fluid_viscosity=1.0e-5,

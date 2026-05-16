@@ -26,7 +26,7 @@ class CaseConfig:
     alpha: float = 1.0
 
     # ---- Geometry (in mesh units, mm by default) ----------------------------
-    hill_height: float = 28.0   # H, the canonical reference length
+    hill_height: float = 0.028   # H, the canonical reference length
     ly_over_h: float = 3.036    # domain height / hill height (2.024, 3.036, 4.048)
 
     # ---- Working fluid (incompressible, constant properties) ----------------

@@ -10,7 +10,10 @@ class FieldErrorCalculator:
     Interpolates RANS data onto the DNS grid for comparison.
     """
     
-    def __init__(self, dns_coords: np.ndarray, dns_fields: dict[str, np.ndarray]):
+    def __init__(self,
+                 dns_coords: np.ndarray,
+                 dns_fields: dict[str, np.ndarray],
+                 field_weights: dict[str, float] | None = None):
         """
         Store the DNS reference data for repeated evaluations.
         
@@ -20,7 +23,9 @@ class FieldErrorCalculator:
         """
         self.dns_coords = dns_coords
         self.dns_fields = dns_fields
-        
+        self.field_weights = field_weights or {}
+     
+
     def calculate_error(self, sim_coords: np.ndarray, sim_fields: dict[str, np.ndarray], field_name: str = "cp") -> float:
         """
         Calculates the Mean Squared Error (MSE) between simulated and DNS fields.
@@ -57,7 +62,20 @@ class FieldErrorCalculator:
         
         # Calculate and return Mean Squared Error
         if len(sim_valid) == 0:
-            raise ValueError("Interpolation resulted in entirely NaN values - check coordinate systems.")
-            
-        mse = np.mean((sim_valid - dns_valid) ** 2)
-        return float(mse)
+            raise ValueError(
+                "Interpolation resulted in entirely NaN values. "
+                "Check coordinate systems and domains."
+            )
+        eps = 1e-8
+
+        denominator = np.maximum(np.abs(dns_valid), eps)
+        error = np.mean(
+            np.abs((dns_valid - sim_valid) / denominator)
+        )
+
+
+        weight = self.field_weights.get(field_name, 1.0)
+
+        error_wighted = weight * error
+
+        return float(error_wighted )

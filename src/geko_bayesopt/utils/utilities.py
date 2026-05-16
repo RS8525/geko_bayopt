@@ -73,7 +73,7 @@ def objective_geko(
         geko_params=geko_params,
         session=session,
         base_case=base_case,
-        reinitialize=False,
+        reinitialize=True,
     )
 
     sim_coords, sim_fields = getSimulationData(outputs["ascii"])
