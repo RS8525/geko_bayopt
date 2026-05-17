@@ -9,29 +9,33 @@
             "fluid_density": 1.0,
             "fluid_viscosity": 1.0e-5,
             "re_h": 5600,
-            "iter_count": 100,
+            "iter_count": 150,
             "zone_inlet": "inlet",
             "zone_outlet": "outlet",
             "zone_top": "wall",
             "zone_bottom": "wall_lower",
             "geometry_path": "data/geometry/periodic_hill_2d_alpha_1.0.dsco",
-            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/mean_files.dat"
+            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/alpha1.0_Re5600_Csep0.7751521847992457.ascii"
         }
     },
     "parameters": [
         {"name": "geko_csep", "low": 0.5, "high": 2.0}
     ],
     "objective": {
-        "kind": "mse_cp",
-        "options": {
-            "weight": 1.0
+    "kind": "gedcp",
+    "options": {
+        "field_names": ["cp", "Ux", "Uy"],
+        "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
+        "lambda_field": 1.0,
+        "lambda_integral": 0.0,
+        "lambda_preference": 0.05
         }
     },
     "optimizer": {
         "kind": "skopt_gp",
         "n_initial": 8,
         "n_iterations": 32,
-        "random_state": 42
+        "random_state": 41
     },
     "mesh": {
         "length_unit": "mm",
@@ -45,5 +49,13 @@
         "bl_growth_rate": 1.15,
         "generate_quads": true
     },
-    "session_strategy": "live"
+    "residual_criteria": {
+        "continuity": 1.0e-5,
+        "x_velocity": 1.0e-5,
+        "y_velocity": 1.0e-5,
+        "k": 1.0e-5,
+        "omega": 1.0e-5
+    },
+    "session_strategy": "live",
+    "keep_only_best_case_files": true
 }

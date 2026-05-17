@@ -79,8 +79,29 @@ class ObjectiveSection(BaseModel):
     ``kind`` matches an entry in ``objective/__init__.py``'s dispatcher.
     ``options`` is passed to the loss factory as keyword arguments.
     """
-    kind: Literal["mse_cp", "mse_field", "weighted_multi_field"]
+    kind: Literal[
+        "mse_cp",
+        "mse_field",
+        "weighted_multi_field",
+        "gedcp",
+    ]
     options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResidualCriteria(BaseModel):
+    """Convergence thresholds for Fluent's residual monitors.
+
+    Fluent stops iterating early once every residual drops below its
+    threshold. Values are absolute (not normalized). Defaults are
+    Fluent's stock 1e-3 for each.
+
+    Use ``None`` for any field to leave Fluent's default in place.
+    """
+    continuity: float = 1.0e-3
+    x_velocity: float = 1.0e-3
+    y_velocity: float = 1.0e-3
+    k: float = 1.0e-3
+    omega: float = 1.0e-3
 
 
 class OptimizerSection(BaseModel):
@@ -116,6 +137,9 @@ class ExperimentConfig(BaseModel):
     optimizer: OptimizerSection
     mesh: MeshSection = Field(default_factory=MeshSection)
 
+    # Convergence criteria for Fluent residuals. Omit to keep Fluent defaults.
+    residual_criteria: ResidualCriteria | None = None
+
     # Where Fluent writes raw outputs (mesh, .cas, .dat, ASCII).
     # Defaults to ``<repo>/results/fluent/<experiment_id>/`` when not set.
     fluent_work_dir: str | None = None
@@ -128,6 +152,10 @@ class ExperimentConfig(BaseModel):
     # one crash kills the sweep).
     # "per_trial": launch + exit Fluent per trial (safer on Student license).
     session_strategy: Literal["live", "per_trial"] = "live"
+
+    # If True, after each trial delete any .cas/.dat files that don't
+    # belong to the current-best trial. The .ascii is always preserved.
+    keep_only_best_case_files: bool = True
 
     @classmethod
     def load(cls, path: str | Path) -> "ExperimentConfig":

@@ -131,3 +131,68 @@ class ResultStore:
             return None
         with open(self.optimizer_path, "rb") as f:
             return pickle.load(f)
+
+    def best_trial(self) -> CompletedTrial | None:
+        """Return the lowest-scoring trial in metadata.csv, or None if empty.
+
+        Used to identify which trial's .cas/.dat files should be kept on
+        disk when ``keep_only_best_case_files`` is enabled.
+        """
+        trials = self.load_completed_trials()
+        if not trials:
+            return None
+        return min(trials, key=lambda t: t.score)
+
+
+def cleanup_non_best_case_files(
+    fluent_work_dir: Path,
+    best_run_id: str | None,
+) -> None:
+    """Delete all .cas.h5 / .dat.h5 / _init.cas.h5 files whose names don't
+    match the current-best run_id.
+
+    The .ascii files are NEVER touched -- they're cheap and useful for
+    post-hoc analysis. The mesh file is also never deleted (it's shared
+    across all trials and doesn't follow the per-trial naming pattern).
+
+    Parameters
+    ----------
+    fluent_work_dir : Path
+        Directory containing the per-trial Fluent outputs.
+    best_run_id : str | None
+        run_id of the current-best trial. Files starting with this prefix
+        and ending in _solved.cas.h5 / _solved.dat.h5 are preserved; all
+        others (including all _init.cas.h5) are deleted. Pass None to
+        delete everything (no preservation).
+    """
+    if not fluent_work_dir.is_dir():
+        return
+
+    keep_solved_cas = (
+        f"{best_run_id}_solved.cas.h5" if best_run_id else None
+    )
+    keep_solved_dat = (
+        f"{best_run_id}_solved.dat.h5" if best_run_id else None
+    )
+
+    deleted = 0
+    for path in fluent_work_dir.iterdir():
+        if not path.is_file():
+            continue
+        name = path.name
+
+        if name.endswith("_init.cas.h5"):
+            path.unlink()
+            deleted += 1
+            continue
+
+        if name == keep_solved_cas or name == keep_solved_dat:
+            continue
+
+        if name.endswith("_solved.cas.h5") or name.endswith("_solved.dat.h5"):
+            path.unlink()
+            deleted += 1
+
+    if deleted > 0:
+        kept = best_run_id if best_run_id else "(none)"
+        print(f"[store] Cleaned {deleted} stale .cas/.dat files (kept best={kept})")

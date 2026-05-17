@@ -65,6 +65,7 @@ class PeriodicHillSolver:
         ui_mode: str = "no_gui_or_graphics",
         container_dict: dict | None = None,
         flow_case = None,
+        residual_criteria: dict[str, float] | None = None,
     ):
         """Create a solver bound to one mesh and one base case.
 
@@ -83,6 +84,7 @@ class PeriodicHillSolver:
         self.ui_mode = ui_mode
         self.container_dict = container_dict
         self.flow_case = flow_case
+        self.residual_criteria = residual_criteria
 
         # Live Fluent session (None until start() is called)
         self._solver = None
@@ -134,6 +136,7 @@ class PeriodicHillSolver:
         self._setup_material()
         self._setup_operating_conditions()
         self._setup_methods()
+        self._setup_residual_monitors()
         print("[solver] Session started and base case configured.")
 
     def run_trial(
@@ -377,3 +380,50 @@ class PeriodicHillSolver:
             self._solver.settings.solution.methods.p_v_coupling.flow_scheme = "Coupled"
         except Exception:
             self._solver.tui.solve.set.p_v_coupling(24)
+
+    def _setup_residual_monitors(self) -> None:
+        """Set residual convergence criteria for Fluent.
+
+        ``self.residual_criteria`` may be:
+            - None: leave Fluent's defaults untouched
+            - a Pydantic ``ResidualCriteria`` model
+            - a plain dict with keys 'continuity', 'x-velocity', 'y-velocity',
+              'k', 'omega' (or underscores -- both forms accepted)
+
+        Fluent's TUI prompts for each residual in order, separated by
+        newlines. We pass the values as space-separated arguments so the
+        TUI reads them as successive responses.
+        """
+        if self.residual_criteria is None:
+            return
+
+        rc = self.residual_criteria
+        # Accept either a Pydantic model (has attributes) or a dict.
+        def _get(name_dash: str, name_under: str, default: float) -> float:
+            if hasattr(rc, name_under):
+                return float(getattr(rc, name_under))
+            if isinstance(rc, dict):
+                return float(rc.get(name_dash, rc.get(name_under, default)))
+            return default
+
+        continuity = _get("continuity", "continuity", 1.0e-3)
+        x_velocity = _get("x-velocity", "x_velocity", 1.0e-3)
+        y_velocity = _get("y-velocity", "y_velocity", 1.0e-3)
+        k_val = _get("k", "k", 1.0e-3)
+        omega_val = _get("omega", "omega", 1.0e-3)
+
+        # Note the trailing spaces -- Fluent's TUI consumes each value
+        # as a separate prompt response.
+        self._solver.execute_tui(
+            "/solve/monitors/residual/convergence-criteria "
+            f"{continuity} "
+            f"{x_velocity} "
+            f"{y_velocity} "
+            f"{k_val} "
+            f"{omega_val} "
+        )
+        print(
+            f"[solver] Residual criteria set: "
+            f"cont={continuity}, u={x_velocity}, v={y_velocity}, "
+            f"k={k_val}, omega={omega_val}"
+        )

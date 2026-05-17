@@ -87,20 +87,27 @@ def parse_fluent_ascii(
         df = df.drop(columns=["nodenumber"])
 
     # Non-dimensionalize coordinates: x/H, y/H
-    x = df["x-coordinate"].to_numpy() / hill_height
-    y = df["y-coordinate"].to_numpy() / hill_height
+    # x = df["x-coordinate"].to_numpy() / hill_height
+    x = df["x-coordinate"].to_numpy()
+    # y = df["y-coordinate"].to_numpy() / hill_height
+    y = df["y-coordinate"].to_numpy()
     coords = np.column_stack([x, y])
 
     # Non-dimensionalize velocity: u/U_b, v/U_b
+    # fields: dict[str, np.ndarray] = {
+    #     "Ux": df["x-velocity"].to_numpy() / u_bulk,
+    #     "Uy": df["y-velocity"].to_numpy() / u_bulk,
+    # }
     fields: dict[str, np.ndarray] = {
-        "Ux": df["x-velocity"].to_numpy() / u_bulk,
-        "Uy": df["y-velocity"].to_numpy() / u_bulk,
+        "Ux": df["x-velocity"].to_numpy(),
+        "Uy": df["y-velocity"].to_numpy(),
     }
-
+    # CHANGE WHEN FINISHED WITH THE TEST CASE
     # Non-dimensionalize pressure: p/(rho U_b^2)
     p_dim = df["pressure"].to_numpy()
     p_scale = fluid_density * u_bulk * u_bulk
-    fields["p"] = p_dim / p_scale
+    # fields["p"] = p_dim / p_scale
+    fields["p"] = p_dim
 
     # Pressure coefficient. Reference convention should match the DNS
     # loader so MSE between them is meaningful. The existing DNS loader

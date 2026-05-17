@@ -23,7 +23,7 @@ from .fluent.mesh_generator import MeshGenerator
 from .fluent.solver import PeriodicHillSolver
 from .objective import build_loss_fn
 from .optimizer import build_optimizer, vector_to_params, params_to_vector
-from .store import ResultStore
+from .store import ResultStore, cleanup_non_best_case_files
 
 
 def _resolve_paths(cfg: ExperimentConfig, root: Path) -> tuple[Path, Path, Path]:
@@ -164,16 +164,19 @@ def run_experiment(
     mesh_path = _ensure_mesh(flow_case, fluent_work_dir, repo_root, ui_mode)
     time.sleep(15)
 
+    # Pull residual criteria from config (None if not set).
+    residual_criteria = cfg.residual_criteria
+
     # ---- Main loop ----
     if cfg.session_strategy == "live":
         _run_live_session(
             cfg, flow_case, mesh_path, fluent_work_dir,
-            optimizer, loss_fn, store, n_completed, ui_mode,
+            optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
         )
     elif cfg.session_strategy == "per_trial":
         _run_per_trial(
             cfg, flow_case, mesh_path, fluent_work_dir,
-            optimizer, loss_fn, store, n_completed, ui_mode,
+            optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
         )
     else:  # pragma: no cover -- pydantic enforces the literal
         raise ValueError(f"Unknown session_strategy: {cfg.session_strategy}")
@@ -187,30 +190,36 @@ def run_experiment(
 
 def _run_live_session(
     cfg, flow_case, mesh_path, fluent_work_dir,
-    optimizer, loss_fn, store, n_completed, ui_mode,
+    optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
 ) -> None:
     """One Fluent process, reused for all trials. Faster, slightly riskier."""
     solver = PeriodicHillSolver(
         flow_case.case_config, mesh_path, fluent_work_dir,
-        ui_mode=ui_mode, flow_case=flow_case,
+        ui_mode=ui_mode, flow_case=flow_case, residual_criteria=residual_criteria
     )
     with solver:
         for i in range(n_completed, cfg.optimizer.n_iterations):
-            _do_one_trial(i, cfg, flow_case, optimizer, loss_fn, store, solver=solver)
+            _do_one_trial(
+                i, cfg, flow_case, optimizer, loss_fn, store,
+                fluent_work_dir, solver=solver,
+            )
 
 
 def _run_per_trial(
     cfg, flow_case, mesh_path, fluent_work_dir,
-    optimizer, loss_fn, store, n_completed, ui_mode,
+    optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
 ) -> None:
     """Launch + exit Fluent per trial. Safer on Student licenses."""
     for i in range(n_completed, cfg.optimizer.n_iterations):
         solver = PeriodicHillSolver(
             flow_case.case_config, mesh_path, fluent_work_dir,
-            ui_mode=ui_mode, flow_case=flow_case,
+            ui_mode=ui_mode, flow_case=flow_case, residual_criteria=residual_criteria
         )
         with solver:
-            _do_one_trial(i, cfg, flow_case, optimizer, loss_fn, store, solver=solver)
+            _do_one_trial(
+                i, cfg, flow_case, optimizer, loss_fn, store,
+                fluent_work_dir, solver=solver,
+            )
 
 
 def _do_one_trial(
@@ -220,10 +229,14 @@ def _do_one_trial(
     optimizer,
     loss_fn,
     store,
+    fluent_work_dir: Path,
     *,
     solver,
 ) -> None:
-    """Ask -> run -> score -> save -> tell. Order matters: save BEFORE tell."""
+    """Ask -> run -> score -> save -> tell -> cleanup.
+
+    Order matters: save BEFORE tell so a crash is recoverable.
+    """
     t_start = time.time()
 
     # 1. Ask
@@ -255,3 +268,9 @@ def _do_one_trial(
     # 5. Tell
     optimizer.tell(x, score)
     store.save_optimizer(optimizer)
+
+    # 6. Cleanup .cas/.dat from non-best trials, if enabled.
+    if cfg.keep_only_best_case_files:
+        best = store.best_trial()
+        best_run_id = best.run_id if best is not None else None
+        cleanup_non_best_case_files(fluent_work_dir, best_run_id)
