@@ -60,7 +60,8 @@ def objective_geko(
     field_calc: FieldErrorCalculator,
     field_names: list[str] | None = None,
     lambdas: dict[str, float] | None = None,
-) -> float:
+    return_details: bool = False,
+) -> float | tuple[float, dict[str, float]]:
     """Objective function for Bayesian optimization of GEKO coefficients."""
 
     if field_names is None:
@@ -80,16 +81,19 @@ def objective_geko(
 
     # Eq. (7): E_F = sum over fields
     field_error = 0.0
+    field_errors = {}
 
     for field_name in field_names:
-        field_error += field_calc.calculate_error(
-            sim_coords=sim_coords,
-            sim_fields=sim_fields,
-            field_name=field_name,
+        error_i = field_calc.calculate_error(
+        sim_coords=sim_coords,
+        sim_fields=sim_fields,
+        field_name=field_name,
         )
 
-    # No integral error yet
-    integral_error = None
+        field_errors[field_name] = float(error_i)
+        field_error += error_i
+
+    integral_error = 0.0
 
     # Eq. (9): default coefficient preference term
     preference = coefficient_preference(
@@ -105,6 +109,17 @@ def objective_geko(
         lambda_integral=lambdas["integral"],
         lambda_preference=lambdas["preference"],
     )
+
+
+    if return_details:
+        details = {
+            "cp_score": -field_errors.get("cp", np.nan),
+            "Ux_score": -field_errors.get("Ux", np.nan),
+            "Uy_score": -field_errors.get("Uy", np.nan),
+            "field_score": float(score)}
+
+
+        return details
 
     return float(score)
 

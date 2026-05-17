@@ -56,6 +56,7 @@ class PeriodicHillSolver:
         data_dir: str | Path,
         ui_mode: str = "no_gui_or_graphics",
         container_dict: dict | None = None,
+        residual_criteria: dict[str, float] | None = None
     ):
         self.case = case
         self.mesh_path = Path(mesh_path).resolve()
@@ -63,6 +64,7 @@ class PeriodicHillSolver:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.ui_mode = ui_mode
         self.container_dict = container_dict
+        self.residual_criteria = residual_criteria
 
         # Live Fluent session (None until start() is called)
         self._solver = None
@@ -114,6 +116,7 @@ class PeriodicHillSolver:
         self._setup_material()
         self._setup_operating_conditions()
         self._setup_methods()
+        self._setup_residual_monitors()
         print("[solver] Session started and base case configured.")
 
     def run_trial(
@@ -347,3 +350,22 @@ class PeriodicHillSolver:
             self._solver.settings.solution.methods.p_v_coupling.flow_scheme = "Coupled"
         except Exception:
             self._solver.tui.solve.set.p_v_coupling(24)
+
+    def _setup_residual_monitors(self) -> None:
+        """Set residual convergence criteria for Fluent."""
+
+        if self.residual_criteria is None:
+            return
+
+        continuity = self.residual_criteria.get("continuity", 1e-3)
+        x_velocity = self.residual_criteria.get("x-velocity", 1e-3)
+        y_velocity = self.residual_criteria.get("y-velocity", 1e-3)
+        k = self.residual_criteria.get("k", 1e-3)
+        omega = self.residual_criteria.get("omega", 1e-3)
+
+        self._solver.execute_tui(
+            "/solve/monitors/residual/convergence-criteria "
+            f"{continuity} {x_velocity} {y_velocity} {k} {omega}"
+        )
+
+

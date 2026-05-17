@@ -39,6 +39,14 @@ lambdas={"field": 1.0, "integral": 1.0,"preference": 0.5}
 
 field_parameters = ["cp", "Ux", "Uy"]
 
+residual_criteria = {
+    "continuity": 1e-12,
+    "x-velocity": 1e-12,
+    "y-velocity": 1e-12,
+    "k": 1e-12,
+    "omega": 1e-12,
+}
+
 # -------------------------------------------------------------------------
 # Load DNS
 # -------------------------------------------------------------------------
@@ -90,7 +98,7 @@ if test_case == 0:
 # -------------------------------------------------------------------------
 history = []
 
-with open_session(CASE, MESH, DATA_DIR) as session:
+with open_session(CASE, MESH, DATA_DIR, residual_criteria=residual_criteria) as session:
     for i in range(itmax):
 
         if i < number_of_sobol_sampling_points:

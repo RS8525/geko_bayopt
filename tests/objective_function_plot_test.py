@@ -12,27 +12,22 @@ from geko_bayesopt.utils.utilities import objective_geko
 from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 
 
-def objective_function_plot(n_csep=50):
+def objective_function_plot(n_csep=30):
     # ---------------------------------------------------------------------
     # Reference Csep from fake DNS
     # ---------------------------------------------------------------------
-    csep_ref = 0.8870889544486
+    csep_ref = 0.8870889544486 #avpid overwriten
 
-    # GEKO default, if you want to show it
-    csep_default = 1.75
     csep_min = 0.7
     csep_max = 2.5
 
-    # ---------------------------------------------------------------------
-    # IMPORTANT for fake DNS:
-    # no preference term, otherwise you bias the optimum toward the default
-    # ---------------------------------------------------------------------
     lambdas = {
         "field": 1.0,
-        "integral": 1.0,
+        "integral": 0.0,
         "preference": 0.5,
     }
 
+    # Only these three fields are used for the GEDCP field score
     field_parameters = ["cp", "Ux", "Uy"]
 
     field_weights = {
@@ -41,33 +36,43 @@ def objective_function_plot(n_csep=50):
         "cp": 1.0,
     }
 
+    residual_criteria = {
+    "continuity": 1e-12,
+    "x-velocity": 1e-12,
+    "y-velocity": 1e-12,
+    "k": 1e-12,
+    "omega": 1e-12,
+}
+
     # ---------------------------------------------------------------------
     # Load fake DNS/reference data
     # ---------------------------------------------------------------------
     PROJECT_DIR = Path(__file__).resolve().parent.parent
 
-    dns_coords, dns_fields = getSimulationData(
-        PROJECT_DIR / "src/geko_bayesopt/ansys/outputs/alpha1.0_Re5600_Csep0.8870889544486.ascii"
+    reference_path = (
+        PROJECT_DIR
+        / "src/geko_bayesopt/ansys/outputs/alpha1.0_Re5600_Csep0.8870889544487.ascii"
     )
+
+    dns_coords, dns_fields = getSimulationData(reference_path)
 
     field_calc = FieldErrorCalculator(
         dns_coords=dns_coords,
         dns_fields=dns_fields,
-        field_weights=field_weights)
+        field_weights=field_weights,
+    )
 
     # ---------------------------------------------------------------------
     # Choose Csep values for line search
-    # Use broad range + denser region near the known reference
     # ---------------------------------------------------------------------
-    csep_values = np.linspace(csep_min, csep_max, n_csep-2)
+    csep_values = np.linspace(csep_min, csep_max, n_csep - 1)
 
-    # Ensure reference and default values are included
+    # Ensure reference value is included exactly
     csep_values = np.concatenate([
         csep_values,
-        np.array([csep_ref, csep_default])
+        np.array([csep_ref]),
     ])
 
-    # Remove duplicates and sort
     csep_values = np.unique(csep_values)
     csep_values = np.sort(csep_values)
 
@@ -76,115 +81,101 @@ def objective_function_plot(n_csep=50):
     # ---------------------------------------------------------------------
     # Run Fluent line search
     # ---------------------------------------------------------------------
-    with open_session(CASE, MESH, DATA_DIR) as session:
+    with open_session(CASE, MESH, DATA_DIR, residual_criteria=residual_criteria) as session:
         for csep in csep_values:
             params = {
                 "geko_csep": float(csep),
             }
 
-            target = objective_geko(
+            # Your objective_geko returns only details when return_details=True
+            details = objective_geko(
                 geko_params=params,
                 session=session,
                 base_case=CASE,
                 field_calc=field_calc,
                 field_names=field_parameters,
                 lambdas=lambdas,
+                return_details=True,
             )
-
-            error = -target
 
             history.append({
                 "geko_csep": float(csep),
-                "target": float(target),
-                "error": float(error),
+                "Ux_score": details.get("Ux_score", np.nan),
+                "Uy_score": details.get("Uy_score", np.nan),
+                "cp_score": details.get("cp_score", np.nan),
+                "field_score": details.get("field_score", np.nan),
             })
 
             print(
                 f"Csep = {csep:.12f} | "
-                f"error = {error:.8e} | "
-                f"target = {target:.8e}"
+                f"Ux_score = {details.get('Ux_score', np.nan):.8e} | "
+                f"Uy_score = {details.get('Uy_score', np.nan):.8e} | "
+                f"cp_score = {details.get('cp_score', np.nan):.8e} | "
+                f"field_score = {details.get('field_score', np.nan):.8e}"
             )
-
-    df = pd.DataFrame(history)
 
     # ---------------------------------------------------------------------
     # Save raw data
     # ---------------------------------------------------------------------
+    df = pd.DataFrame(history)
+    df = df.sort_values("geko_csep")
+
     output_dir = Path(DATA_DIR)
-    csv_path = output_dir / "objective_linesearch_csep.csv"
+
+    csv_path = output_dir / "objective_scores_linesearch_csep.csv"
     df.to_csv(csv_path, index=False)
 
     # ---------------------------------------------------------------------
-    # Interpolation for visualization only
+    # Interpolated plot
     # ---------------------------------------------------------------------
     x = df["geko_csep"].to_numpy()
-    y = df["target"].to_numpy()
-
-    sort_idx = np.argsort(x)
-    x = x[sort_idx]
-    y = y[sort_idx]
-
-    interpolator = PchipInterpolator(x, y)
-
     x_smooth = np.linspace(x.min(), x.max(), 500)
-    y_smooth = interpolator(x_smooth)
 
-    # Interpolated value at reference Csep
-    ref_target_interp = interpolator(csep_ref)
+    scores_to_plot = {
+        r"$-E_{Ux}$": df["Ux_score"].to_numpy(),
+        r"$-E_{Uy}$": df["Uy_score"].to_numpy(),
+        r"$-E_{cp}$": df["cp_score"].to_numpy(),
+        r"$f_{GEDCP}$": df["field_score"].to_numpy(),
+    }
 
-    # Interpolated value at default Csep, if inside range
-    default_target_interp = interpolator(csep_default)
+    plt.figure(figsize=(7, 4.5))
 
-    # ---------------------------------------------------------------------
-    # Plot
-    # ---------------------------------------------------------------------
-    plt.figure(figsize=(6, 4))
+    for label, y in scores_to_plot.items():
+        interpolator = PchipInterpolator(x, y)
+        y_smooth = interpolator(x_smooth)
 
-    plt.plot(
-        x_smooth,
-        y_smooth,
-        color="black",
-        linewidth=1.8,
-        label=r"Interpolated $f(C_{sep})$",
-    )
+        plt.plot(
+            x_smooth,
+            y_smooth,
+            linewidth=1.8,
+            label=label,
+        )
 
-    plt.scatter(
-        x,
-        y,
-        color="black",
-        s=25,
-        label="RANS evaluations",
-    )
+        plt.scatter(
+            x,
+            y,
+            s=18,
+        )
 
-    plt.scatter(
+    plt.axvline(
         csep_ref,
-        ref_target_interp,
-        marker="s",
-        color="black",
-        s=70,
+        linestyle="--",
+        linewidth=1,
         label=r"Reference $C_{sep}$",
     )
 
-
-    plt.scatter(
-        csep_default,
-        default_target_interp,
-        marker="^",
-        color="black",
-        s=70,
-        label=r"Default $C_{sep}$",
-    )
-
     plt.xlabel(r"$C_{sep}$")
-    plt.ylabel(r"$f_{GEDCP}(C_{sep})$")
+    plt.ylabel("Score")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
 
-    fig_path = output_dir / "objective_linesearch_csep.png"
+    fig_path = output_dir / "objective_scores_linesearch_csep.png"
     plt.savefig(fig_path, dpi=300)
     plt.show()
 
+    print(f"\nCSV saved to:    {csv_path}")
+    print(f"Figure saved to: {fig_path}")
 
 
 if __name__ == "__main__":

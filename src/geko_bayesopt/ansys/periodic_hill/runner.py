@@ -28,6 +28,7 @@ def run_case(
     *,
     skip_meshing_if_exists: bool = True,
     ui_mode: str = "no_gui_or_graphics",
+    residual_criteria: dict[str, float] | None = None,
 ) -> dict[str, Path]:
     """Generate the mesh (if needed) and run the solver for one case.
 
@@ -57,7 +58,7 @@ def run_case(
         time.sleep(10)
 
     print(f"[run_case] Running solver for case {case.case_id}")
-    return PeriodicHillSolver(case, mesh_path, data_dir, ui_mode=ui_mode).run()
+    return PeriodicHillSolver(case, mesh_path, data_dir, ui_mode=ui_mode, residual_criteria=residual_criteria).run()
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +73,7 @@ def open_session(
     *,
     skip_meshing_if_exists: bool = True,
     ui_mode: str = "no_gui_or_graphics",
+    residual_criteria: dict[str, float] | None = None,
 ) -> Generator[PeriodicHillSolver, None, None]:
     """Open a long-lived Fluent session for repeated GEKO trials.
 
@@ -108,7 +110,7 @@ def open_session(
         mesh_path = mesh_generator.generate()
 
     # Launch + base setup once, yield session, close on exit (even on error)
-    session = PeriodicHillSolver(base_case, mesh_path, data_dir, ui_mode=ui_mode)
+    session = PeriodicHillSolver(base_case, mesh_path, data_dir, ui_mode=ui_mode,residual_criteria=residual_criteria)
     session.start()
     try:
         yield session

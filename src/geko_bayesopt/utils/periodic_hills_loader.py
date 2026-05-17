@@ -39,6 +39,9 @@ def getSimulationData(sim_path: str | Path) -> tuple[np.ndarray, dict[str, np.nd
     v_data = data[:, 4]
     p_data = data[:, 5]
 
+    # Velocity magnitude
+    umag_data = np.sqrt(u_data**2 + v_data**2)
+
     # Same logic as DNS: pressure shifted by final pressure value
     cp_data = p_data - p_data[-1]
 
@@ -46,6 +49,7 @@ def getSimulationData(sim_path: str | Path) -> tuple[np.ndarray, dict[str, np.nd
         "cp": cp_data,
         "Ux": u_data,
         "Uy": v_data,
+        "Umag": umag_data,
     }
 
     return sim_coords, sim_fields
