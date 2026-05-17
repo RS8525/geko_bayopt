@@ -37,11 +37,11 @@ def objective_function_plot(n_csep=30):
     }
 
     residual_criteria = {
-    "continuity": 1e-12,
-    "x-velocity": 1e-12,
-    "y-velocity": 1e-12,
-    "k": 1e-12,
-    "omega": 1e-12,
+    "continuity": 1e-5,
+    "x-velocity": 1e-5,
+    "y-velocity": 1e-5,
+    "k": 1e-5,
+    "omega": 1e-5,
 }
 
     # ---------------------------------------------------------------------

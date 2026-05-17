@@ -19,7 +19,7 @@ pbounds = {
     "geko_csep": (0.7, 2.5),
 }
 
-number_of_sobol_sampling_points = 10
+number_of_sobol_sampling_points = 4
 itmax = 3 * number_of_sobol_sampling_points
 
 sobol_sampling_points = get_sobol_sampling_points(
@@ -40,11 +40,11 @@ lambdas={"field": 1.0, "integral": 1.0,"preference": 0.5}
 field_parameters = ["cp", "Ux", "Uy"]
 
 residual_criteria = {
-    "continuity": 1e-12,
-    "x-velocity": 1e-12,
-    "y-velocity": 1e-12,
-    "k": 1e-12,
-    "omega": 1e-12,
+    "continuity": 1e-5,
+    "x-velocity": 1e-5,
+    "y-velocity": 1e-5,
+    "k": 1e-5,
+    "omega": 1e-5,
 }
 
 # -------------------------------------------------------------------------
@@ -75,10 +75,10 @@ if test_case == 0:
 
     BASE_DIR = Path(__file__).resolve().parent.parent
 
-    DNS_CSEP0887 = getSimulationData(
+    DNS_CSEP0886 = getSimulationData(
         BASE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.8870889544486.ascii"
     )
-    sim_coords,sim_fields=DNS_CSEP0887
+    sim_coords,sim_fields=DNS_CSEP0886
 
     field_weights = {
         "Ux": 1.0,
