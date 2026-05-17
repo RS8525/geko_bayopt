@@ -21,25 +21,32 @@ class Plotting:
 
     def __init__(self,
                  history: list,
-                 number_of_sobol_sampling_points: int,
+                 input_dir: str,
                  output_dir: str,
-                 parameter_space: dict,
+                 parameter_space: dict = {"geko_csep": (0.7, 2.5),
+                                          "geko_cnw": (-2.0, 2.0)},
                  GEKO_default_dir: str = None,
                  DNS_dir: str = None,
                  GEKO_optimal_dir: str = None,
+                 number_of_sobol_sampling_points: int = None,
                  figsize: tuple = (10, 6)
                  ):
         """
         Args:
             history (list): The optimization history.
             number_of_sobol_sampling_points (int): Number of initial Sobol sampling points.
+            input_dir (str): Directory containing input data.
             output_dir (str): Directory where plots will be saved.
             parameter_space (dict): The parameter space definition.
+            GEKO_default_dir (str, optional): Directory with GEKO default results.
+            DNS_dir (str, optional): Directory with DNS results.    
+            GEKO_optimal_dir (str, optional): Directory with GEKO optimal results.
             figsize (tuple): Default figure size. Defaults to (10, 6).
         """
         self.history = history
         self.number_of_sobol_sampling_points = number_of_sobol_sampling_points
         self.output_dir = output_dir
+        self.input_dir = input_dir
         self.parameter_space = parameter_space
         self.DNS_dir = DNS_dir
         self.GEKO_default_dir = GEKO_default_dir
@@ -124,7 +131,7 @@ class Plotting:
 
         df = df.sort_values(C_ref_label)
 
-        csv_path = os.path.join(self.output_dir, "objective_scores_linesearch_csep.csv")
+        csv_path = os.path.join(self.input_dir, "objective_scores_linesearch_csep.csv")
         df.to_csv(csv_path, index=False)
 
         x = df[C_ref_label].to_numpy()
@@ -262,3 +269,127 @@ class Plotting:
         plt.tight_layout()
 
         self._save(f"Objective_Interpolated_2D_{score_key}.png")
+
+
+
+
+
+from pathlib import Path
+
+from geko_bayesopt.ansys.run import CASE, MESH, DATA_DIR
+from geko_bayesopt.ansys.periodic_hill.runner import open_session
+from geko_bayesopt.objective.field_error import FieldErrorCalculator
+from geko_bayesopt.utils.utilities import objective_geko
+from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
+
+
+def objective_function_plot(n_csep=3):
+    # ---------------------------------------------------------------------
+    # Reference Csep from fake DNS
+    # ---------------------------------------------------------------------
+    csep_ref = 0.8870889544486 
+
+    csep_min = 0.7
+    csep_max = 2.5
+
+    lambdas = {
+        "field": 1.0,
+        "integral": 0.0,
+        "preference": 0.5,
+    }
+
+    # Only these three fields are used for the GEDCP field score
+    field_parameters = ["cp", "Ux", "Uy"]
+
+    field_weights = {
+        "Ux": 1.0,
+        "Uy": 1.0,
+        "cp": 1.0,
+    }
+
+    residual_criteria = {
+    "continuity": 1e-5,
+    "x-velocity": 1e-5,
+    "y-velocity": 1e-5,
+    "k": 1e-5,
+    "omega": 1e-5,
+}
+
+    # ---------------------------------------------------------------------
+    # Load fake DNS/reference data
+    # ---------------------------------------------------------------------
+    PROJECT_DIR = Path(__file__).resolve().parent
+
+    reference_path = (
+        PROJECT_DIR
+        / "reference_data/alpha1.0_Re5600_Csep0.8870889544486.ascii"
+    )
+
+    dns_coords, dns_fields = getSimulationData(reference_path)
+
+    field_calc = FieldErrorCalculator(
+        dns_coords=dns_coords,
+        dns_fields=dns_fields,
+        field_weights=field_weights,
+    )
+
+    csep_values = np.linspace(csep_min, csep_max, n_csep - 1)
+
+    # Ensure reference value is included exactly
+    csep_values = np.concatenate([
+        csep_values,
+        np.array([csep_ref]),
+    ])
+
+    csep_values = np.unique(csep_values)
+    csep_values = np.sort(csep_values)
+
+    history = []
+
+    # ---------------------------------------------------------------------
+    # Run Fluent line search
+    # ---------------------------------------------------------------------
+    with open_session(CASE, MESH, DATA_DIR, residual_criteria=residual_criteria) as session:
+        for csep in csep_values:
+            params = {
+                "geko_csep": float(csep),
+            }
+
+            # Your objective_geko returns only details when return_details=True
+            details = objective_geko(
+                geko_params=params,
+                session=session,
+                base_case=CASE,
+                field_calc=field_calc,
+                field_names=field_parameters,
+                lambdas=lambdas,
+                return_details=True,
+            )
+
+            history.append({
+                "geko_csep": float(csep),
+                "Ux_score": details.get("Ux_score", np.nan),
+                "Uy_score": details.get("Uy_score", np.nan),
+                "cp_score": details.get("cp_score", np.nan),
+                "field_score": details.get("field_score", np.nan),
+            })
+
+            print(
+                f"Csep = {csep:.12f} | "
+                f"Ux_score = {details.get('Ux_score', np.nan):.8e} | "
+                f"Uy_score = {details.get('Uy_score', np.nan):.8e} | "
+                f"cp_score = {details.get('cp_score', np.nan):.8e} | "
+                f"field_score = {details.get('field_score', np.nan):.8e}"
+            )
+
+    Plotting(
+        history=history,
+        number_of_sobol_sampling_points=None,
+        input_dir=Path(DATA_DIR),
+        output_dir=os.path.join(PROJECT_DIR, "plots"),
+        parameter_space={"geko_csep": (csep_min, csep_max)},
+    ).Interpolate_1d(C_ref=csep_ref)
+
+
+if __name__ == "__main__":
+    objective_function_plot()
