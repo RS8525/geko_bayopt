@@ -54,6 +54,48 @@ def analyze_dns_data(case_name):
     print(f"Unique values in column 2 for min in column 0: {len(np.unique(col_2))}")
 
 
+def derive_u_bulk(case_name):
+    """
+    Derives U_bulk from the DNS data for a given case.
+    U_bulk is computed at the hill crest (x = 0) by integrating Ux over the y.
+    
+    Args:
+        case_name (str): The name of the DNS case directory.
+    """
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "dns", "periodic_hills", "pehill-29-cases-DNS"))
+    data_file = os.path.join(base_dir, case_name, "mean_files.dat")
+
+    # Load the data
+    data = np.genfromtxt(data_file, dtype=float, skip_header=0, delimiter=None)
+    
+    # Filter for x = 0 (or closest to 0) to compute U_bulk at the hill crest
+    x_col = data[:, 0]
+    min_x = np.min(x_col)
+    crest_data = data[x_col == min_x]
+    
+    # Sort by y to ensure correct integration
+    crest_data = crest_data[crest_data[:, 1].argsort()]
+    
+    # Exclude solid hill region; fluid domain starts at y=1 at the hill crest
+    crest_data = crest_data[crest_data[:, 1] >= 1.0]
+
+    y = crest_data[:, 1]
+    ux = crest_data[:, 2] # Ux is at index 2
+    
+    # Integrate Ux over y to find U_bulk (U_bulk = 1/H * integral(Ux dy) where H is channel height at crest)
+    height = y[-1] - 1.0 # Height is from y=1 (hill crest) to the flat top boundary
+    u_bulk = np.trapezoid(ux, x=y) / height
+    
+    print(f"[{case_name}] U_bulk at x={min_x}: {u_bulk:.6f} (height: {height:.6f})")
+    return u_bulk
+
+
 if __name__ == "__main__":
     # Example usage
     analyze_dns_data("alph10-9-3036")
+    
+    print("\n--- Deriving U_bulk ---")
+    derive_u_bulk("alph10-9-3036")
+    derive_u_bulk("alph10-6-3036") # Example of a second case
+    derive_u_bulk("alph05-4071-3036") # Example of a third case
+    derive_u_bulk("alph05-7071-3036") # Example of a fourth case

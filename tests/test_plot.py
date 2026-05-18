@@ -99,11 +99,11 @@ def plot_and_save_simulation_data(sim_file_path, output_dir):
 if __name__ == "__main__":
     # Example usage
     output_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "results", "experiments", "periodic_hills"))
-    plot_dns_data("alph10-9-3036", output_directory)
+    plot_dns_data("alph10-6-3036", output_directory)
     plt.close('all')  # Close DNS plots before plotting simulation data
     
-    sim_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src", "geko_bayesopt", "ansys", "outputs", "alpha1.0_Re5600_Csep1.678009572655402.ascii"))
-    plot_and_save_simulation_data(sim_file, output_directory)
+    # sim_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src", "geko_bayesopt", "ansys", "outputs", "alpha1.0_Re5600_Csep1.678009572655402.ascii"))
+    # plot_and_save_simulation_data(sim_file, output_directory)
     
-    plt.show()  # Keep the DNS plots open at the end
+    # plt.show()  # Keep the DNS plots open at the end
 
