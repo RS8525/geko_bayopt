@@ -1,0 +1,62 @@
+{
+    "experiment_id": "periodic_hills_csep_pmdb_v1",
+    "case": {
+        "kind": "periodic_hills",
+        "options": {
+            "alpha": 1.0,
+            "hill_height": 1.0,
+            "ly_over_h": 3.036,
+            "fluid_density": 1.0,
+            "fluid_viscosity": 1.0e-5,
+            "re_h": 5600,
+            "iter_count": 15,
+            "zone_inlet": "inlet",
+            "zone_outlet": "outlet",
+            "zone_top": "ceiling",
+            "zone_bottom": "hill",
+            "geometry_path": "data/geometry/perhill/Periodic_Hill_10_90_3036.pmdb",
+            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/mean_files.dat"
+        }
+    },
+    "parameters": [
+        {"name": "geko_csep", "low": 0.5, "high": 2.5}
+    ],
+    "objective": {
+    "kind": "gedcp",
+    "options": {
+        "field_names": ["cp", "Ux", "Uy"],
+        "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
+        "lambda_field": 1.0,
+        "lambda_integral": 0.0,
+        "lambda_preference": 0.05
+        }
+    },
+    "optimizer": {
+        "kind": "skopt_gp",
+        "n_initial": 8,
+        "n_iterations": 40,
+        "random_state": 25
+    },
+    "mesh": {
+        "length_unit": "mm",
+        "cad_route": "Workbench",
+        "cad_extension": "pmdb",
+        "min_size": 5,
+        "max_size": 10,
+        "growth_rate": 1.2,
+        "curvature_normal_angle": 12,
+        "bl_first_layer_height": 1,
+        "bl_number_of_layers": 10,
+        "bl_growth_rate": 1.2,
+        "generate_quads": true
+    },
+    "residual_criteria": {
+        "continuity": 1.0e-5,
+        "x_velocity": 1.0e-5,
+        "y_velocity": 1.0e-5,
+        "k": 1.0e-5,
+        "omega": 1.0e-5
+    },
+    "session_strategy": "live",
+    "keep_only_best_case_files": true
+}

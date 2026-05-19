@@ -1,0 +1,126 @@
+
+
+Opening input/output transcript to file "C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\airfoil_git\pyansys-workflows\geometry-mesh-fluent\outputs\fluent-20260519-103230-49828.trn".
+Auto-Transcript Start Time:  10:32:30, 19 May 2026 Mitteleurop?ische Sommerzeit 
+
+              Welcome to ANSYS Fluent 2026 R1
+
+              Copyright 2026 Synopsys, Inc. and ANSYS, Inc. All rights reserved.
+              Unauthorized use, distribution or duplication is prohibited.
+              This product is subject to U.S. laws governing export and re-export.
+              For full Legal Notice, see documentation.
+
+Build Time: Feb  2 2026 16:32:00 EST  Build Id: 10262  
+ 
+Connected License Server List:	<Non FlexNet Publisher License Server (FNPLS)>
+
+     --------------------------------------------------------------
+     This is a student version of ANSYS FLUENT. Usage of this product
+     license is limited to the terms and conditions specified in your ANSYS
+     license form, additional terms section.
+     --------------------------------------------------------------
+Host spawning Node 0 on machine "Roman_Laptop" (win64).
+Host waiting for connection from Node 0 at 127.0.0.1:59373 
+
+Node 0 connecting to the Host ... connection established.
+
+----------------------------------------------------------------------------------------
+ID    Hostname      Core  O.S.         PID    CPU Model Name                           
+----------------------------------------------------------------------------------------
+n3    Roman_Laptop  4/20  Windows-x64  35136  13th Gen Intel(R) Core(TM) i7-13650HX    
+n2    Roman_Laptop  3/20  Windows-x64  49748  13th Gen Intel(R) Core(TM) i7-13650HX    
+n1    Roman_Laptop  2/20  Windows-x64  48228  13th Gen Intel(R) Core(TM) i7-13650HX    
+n0*   Roman_Laptop  1/20  Windows-x64  41836  13th Gen Intel(R) Core(TM) i7-13650HX    
+host  Roman_Laptop        Windows-x64  48044  13th Gen Intel(R) Core(TM) i7-13650HX    
+
+MPI Option Selected: intel
+Selected system interconnect: default
+----------------------------------------------------------------------------------------
+
+Cleanup script file is C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\airfoil_git\pyansys-workflows\geometry-mesh-fluent\outputs\cleanup-fluent-Roman_Laptop-48044.bat
+Note: Rank = 0: Process affinity not being set (6).
+Note: Rank = 1: Process affinity not being set (6).
+Note: Rank = 2: Process affinity not being set (6).
+Note: Rank = 3: Process affinity not being set (6).
+
+Graphics driver currently in use: dx11
+
+Meshing> 
+Error: The workflow cannot be saved because it does not contain any tasks. 
+Initiate the workflow, or add one or more tasks, before saving the workflow.
+Error Object: #f
+
+Error: Multiple file selections is not supported for 2D Meshing Workflow. Select single file and try again.
+Error Object: #f
+
+Error: Multiple file selections is not supported for 2D Meshing Workflow. Select single file and try again.
+Error Object: #f
+
+Error: state/object/execute-command:Exception encountered in S_ExecuteTask: Multiple file selections is not supported for 2D Meshing Workflow. Select single file and try again.
+Error Object: ()
+
+C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\airfoil_git\pyansys-workflows\geometry-mesh-fluent\outputs>set PATH=C:\Program Files\ANSYS Inc\ANSYS Student\v261/commonfiles/CAD/Siemens/Parasolid36.1.227/winx64;C:\Program Files\ANSYS Inc\ANSYS Student\v261/commonfiles/Stride/winx64;C:\Program Files\ANSYS Inc\ANSYS Student\v261/aisol/bin/winx64;C:\Program Files\ANSYS Inc\ANSYS Student\v261/scdm/Addins/Ansys 26.1;C:\Program Files\ANSYS Inc\ANSYS Student\v261/Framework/bin/Win64;C:\Program Files\ANSYS Inc\ANSYS Student\v261/tp/hdf5/1.12.2/winx64;C:\Program Files\ANSYS Inc\ANSYS Student\v261/tp/zlib/1.2.13/winx64;C:\Program Files\ANSYS Inc\ANSYS Student\v261/tp/IntelCompiler/2023.1.0/winx64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\addons\afd\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\addons\afd\win64;;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\addons\afd\win64\3ddp_host;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\multiport\mpi_wrapper\win64\stub;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\ntbin\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\ntbin\win64\opengl;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\multiport\win64\net\shared;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\cortex\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\wave\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\vki\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\KINetics\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\fsi\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\addons\afd\win64\3ddp_host;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\multiport\mpi_wrapper\win64\stub;;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\..\lib\win64\Qt\bin;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\..\..\commonfiles\CPython\3_10\winx64\Release\python;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\..\..\tp\IntelCompiler\2023.1.0\winx64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\..\..\tp\IntelMKL\2024.2.3\winx64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\..\..\tp\Omniverse\Connect;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\..\..\tp\boost\1.71\winx64\lib\Release;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\..\ntbin\win64\hoops;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\addons\afd\win64;;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\addons\afd\win64\3ddp_host;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\multiport\mpi_wrapper\win64\stub;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\ntbin\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\ntbin\win64\opengl;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\multiport\win64\net\shared;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\cortex\win64;C:\Program Files\ANSYS Inc\ANSYS Student\v261\fluent\ntbin\win64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\lib\win64\Qt\bin;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\..\tp\IntelCompiler\2023.1.0\winx64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\..\tp\IntelMKL\2024.2.3\winx64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\..\tp\Omniverse\Connect;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\..\tp\boost\1.71\winx64\lib\Release;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\..\commonfiles\fluids\lib\winx64;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\ntbin\win64\hoops;C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\ntbin\win64;C:\gurobi1203\win64\bin;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\Git\cmd;C:\Program Files\MATLAB\R2025b\runtime\win64;C:\Program Files\MATLAB\R2025b\bin;C:\Program Files\dotnet\;C:\Users\rscha\AppData\Local\Microsoft\WindowsApps;C:\Users\rscha\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\rscha\AppData\Local\Programs\Python\Python313\Scripts;C:\Users\rscha\AppData\Local\Programs\MiKTeX\miktex\bin\x64\; 
+
+C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\airfoil_git\pyansys-workflows\geometry-mesh-fluent\outputs>"C:\Program Files\ANSYS Inc\ANSYS Student\v261/aisol/bin/winx64/FMTransmogrifier_WB" "C:\Users\rscha\AppData\Local\Temp/options1779179700.63304849828.xml" 
+C:\Program Files\ANSYS Inc\ANSYS Student\v261/aisol/bin/winx64/FMTransmogrifier_WB started, #arguments = 1
+Version 1.5.0 Release build Jan 30 2026 13:52:24 from HEAD d2194b49847f6ccf2c5005c7ad17dda56c7dfa70
+    loading PartMgr from 'C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\geko_bayesopt\data\geometry\perhill\Periodic_Hill_10_120_3036.pmdb' ...
+    using length unit m
+    saving data to 'C:/Users/rscha/Documents/SS 26/Case Studies Turbulence/Neuer Ordner/geko_bayesopt/data/geometry/perhill/Periodic_Hill_10_120_3036.fmd' ...
+
+C:\Program Files\ANSYS Inc\ANSYS Student\v261/aisol/bin/winx64/FMTransmogrifier_WB succeeded in 1.32368 [s]
+    loading data from 'C:/Users/rscha/Documents/SS 26/Case Studies Turbulence/Neuer Ordner/geko_bayesopt/data/geometry/perhill/Periodic_Hill_10_120_3036.fmd' ...
+    configured Parasolid facet options:
+        SurfaceDeviation = '0.00075 m'
+        SurfaceAngleDeviation = '8 deg'
+        RelativeMaxEdgeWidthFactor = '0.02'
+    
+    configured Parasolid using multithreaded faceter: True
+    using length unit [m]
+    running parasolid multi thread faceter...
+    faceting bodyList (number of 1 bodies) done in 0.0323313 [s]
+    faceting entities done in 0.0001129 [s]
+    processing 378 zones ...
+Initializing geometry association data using 1 thread(s)!
+Writing C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\geko_bayesopt\data\geometry\perhill\FM_Roman_Laptop_49828\initial.pmdat
+writing mesh file C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\geko_bayesopt\data\geometry\perhill\FM_Roman_Laptop_49828\initial.pmdat...
+Done
+
+---------------- Import consisting of 1 meshing part(s), complete. 
+ 
+Writing C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\geko_bayesopt\data\geometry\perhill\FM_Roman_Laptop_49828\TaskObject7.pmdat
+writing mesh file C:\Users\rscha\Documents\SS 26\Case Studies Turbulence\Neuer Ordner\geko_bayesopt\data\geometry\perhill\FM_Roman_Laptop_49828\TaskObject7.pmdat...
+Done
+Computing size field ...
+Processing volumetric curvature size function 1
+Processing volumetric curvature size function 2
+
+ Error in the fluent (tgrid) process : connection reset
+
+Error: An error occured during task update
+
+An error occured during task update
+
+An error occured during task update
+
+An error occured during task update
+Error Object: #f
+
+Error: An error occured during task update
+
+An error occured during task update
+
+An error occured during task update
+
+An error occured during task update
+Error Object: #f
+
+Error: state/object/execute-command:Exception encountered in S_ExecuteTask: An error occured during task update
+
+An error occured during task update
+
+An error occured during task update
+
+An error occured during task update
+Error Object: ()
+
