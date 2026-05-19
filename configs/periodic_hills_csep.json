@@ -39,8 +39,8 @@
     },
     "mesh": {
         "length_unit": "mm",
-        "cad_route": "Workbench",
-        "cad_extension": "pmdb",
+        "cad_route": "DSCO",
+        "cad_extension": "dsco",
         "min_size": 5,
         "max_size": 10,
         "growth_rate": 1.2,
