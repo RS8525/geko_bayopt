@@ -19,8 +19,7 @@
         }
     },
     "parameters": [
-        {"name": "geko_csep", "low": 0.7, "high": 2.5},
-        {"name": "geko_cnw", "low": -2.0, "high": 2.0}
+        {"name": "geko_csep", "low": 0.5, "high": 2.0}
     ],
     "objective": {
     "kind": "gedcp",
