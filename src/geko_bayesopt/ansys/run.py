@@ -24,7 +24,7 @@ CASE = CaseConfig(
     re_h=5600,
     # GEKO coefficients -- None means "use Fluent default".
     # Defaults: Csep=1.75, Cnw=0.5, Cmix=0.0, Cjet=0.9, Ccorner=1.0
-    geko_csep=2.0,
+    geko_csep=None,
     geko_cnw=None,
     geko_cmix=None,
     geko_cjet=None,

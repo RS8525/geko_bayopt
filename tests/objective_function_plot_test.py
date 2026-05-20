@@ -12,14 +12,14 @@ from geko_bayesopt.utils.utilities import objective_geko
 from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 
 
-def objective_function_plot(n_csep=30):
+def objective_function_plot(n_cnw=30):
     # ---------------------------------------------------------------------
     # Reference Csep from fake DNS
     # ---------------------------------------------------------------------
-    csep_ref = 0.8870889544486 #avpid overwriten
+    cnw_ref = -1.6299342457205057
 
-    csep_min = 0.7
-    csep_max = 2.5
+    cnw_min = -2
+    cnw_max = 2
 
     lambdas = {
         "field": 1.0,
@@ -51,7 +51,7 @@ def objective_function_plot(n_csep=30):
 
     reference_path = (
         PROJECT_DIR
-        / "src/geko_bayesopt/ansys/outputs/alpha1.0_Re5600_Csep0.8870889544487.ascii"
+        / "src/geko_bayesopt/ansys/outputs/alpha1.0_Re5600_Csep0.8719157334417105_Cnw-1.6299342457205057.ascii"
     )
 
     dns_coords, dns_fields = getSimulationData(reference_path)
@@ -65,16 +65,16 @@ def objective_function_plot(n_csep=30):
     # ---------------------------------------------------------------------
     # Choose Csep values for line search
     # ---------------------------------------------------------------------
-    csep_values = np.linspace(csep_min, csep_max, n_csep - 1)
+    cnw_values = np.linspace(cnw_min, cnw_max, n_cnw - 1)
 
     # Ensure reference value is included exactly
-    csep_values = np.concatenate([
-        csep_values,
-        np.array([csep_ref]),
+    cnw_values = np.concatenate([
+        cnw_values,
+        np.array([cnw_ref]),
     ])
 
-    csep_values = np.unique(csep_values)
-    csep_values = np.sort(csep_values)
+    cnw_values = np.unique(cnw_values)
+    cnw_values = np.sort(cnw_values)
 
     history = []
 
@@ -82,9 +82,9 @@ def objective_function_plot(n_csep=30):
     # Run Fluent line search
     # ---------------------------------------------------------------------
     with open_session(CASE, MESH, DATA_DIR, residual_criteria=residual_criteria) as session:
-        for csep in csep_values:
+        for cnw in cnw_values:
             params = {
-                "geko_csep": float(csep),
+                "geko_cnw": float(cnw),
             }
 
             # Your objective_geko returns only details when return_details=True
@@ -99,7 +99,7 @@ def objective_function_plot(n_csep=30):
             )
 
             history.append({
-                "geko_csep": float(csep),
+                "geko_cnw": float(cnw),
                 "Ux_score": details.get("Ux_score", np.nan),
                 "Uy_score": details.get("Uy_score", np.nan),
                 "cp_score": details.get("cp_score", np.nan),
@@ -107,7 +107,7 @@ def objective_function_plot(n_csep=30):
             })
 
             print(
-                f"Csep = {csep:.12f} | "
+                f"Cnw = {cnw:.12f} | "
                 f"Ux_score = {details.get('Ux_score', np.nan):.8e} | "
                 f"Uy_score = {details.get('Uy_score', np.nan):.8e} | "
                 f"cp_score = {details.get('cp_score', np.nan):.8e} | "
@@ -118,17 +118,17 @@ def objective_function_plot(n_csep=30):
     # Save raw data
     # ---------------------------------------------------------------------
     df = pd.DataFrame(history)
-    df = df.sort_values("geko_csep")
+    df = df.sort_values("geko_cnw")
 
     output_dir = Path(DATA_DIR)
 
-    csv_path = output_dir / "objective_scores_linesearch_csep.csv"
+    csv_path = output_dir / "objective_scores_linesearch_cnw.csv"
     df.to_csv(csv_path, index=False)
 
     # ---------------------------------------------------------------------
     # Interpolated plot
     # ---------------------------------------------------------------------
-    x = df["geko_csep"].to_numpy()
+    x = df["geko_cnw"].to_numpy()
     x_smooth = np.linspace(x.min(), x.max(), 500)
 
     scores_to_plot = {
@@ -158,19 +158,19 @@ def objective_function_plot(n_csep=30):
         )
 
     plt.axvline(
-        csep_ref,
+        cnw_ref,
         linestyle="--",
         linewidth=1,
-        label=r"Reference $C_{sep}$",
+        label=r"Reference $C_{nw}$",
     )
 
-    plt.xlabel(r"$C_{sep}$")
+    plt.xlabel(r"$C_{nw}$")
     plt.ylabel("Score")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
 
-    fig_path = output_dir / "objective_scores_linesearch_csep.png"
+    fig_path = output_dir / "objective_scores_linesearch_cnw.png"
     plt.savefig(fig_path, dpi=300)
     plt.show()
 

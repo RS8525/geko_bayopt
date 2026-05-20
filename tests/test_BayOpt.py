@@ -17,6 +17,7 @@ acq = acquisition.UpperConfidenceBound(kappa=2.5)
 # Parameter bounds
 pbounds = {
     "geko_csep": (0.5, 2.5),
+    "geko_cnw": (-2, 0),
 }
 
 number_of_sobol_sampling_points = 8
@@ -37,6 +38,14 @@ optimizer = BayesianOptimization(
 
 lambdas={"field": 1.0, "integral": 1.0,"preference": 0}
 
+residual_criteria = {
+    "continuity": 1e-5,
+    "x-velocity": 1e-5,
+    "y-velocity": 1e-5,
+    "k": 1e-5,
+    "omega": 1e-5,
+}
+
 field_parameters = ["cp", "Ux", "Uy"]
 
 # -------------------------------------------------------------------------
@@ -55,7 +64,7 @@ import geko_bayesopt
 PACKAGE_DIR = Path(geko_bayesopt.__file__).resolve().parent
 
 DNS_CSEP0887 = getSimulationData(
-    PACKAGE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.8870889544486.ascii"
+    PACKAGE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.8719157334417105_Cnw-1.6299342457205057.ascii"
 )
 
 sim_coords,sim_fields=DNS_CSEP0887
@@ -72,20 +81,12 @@ field_calc = FieldErrorCalculator(
 # Direct Csep test loop
 # -------------------------------------------------------------------------
 
-csep_values_to_test = [
-    0.8870889544488,
-    1.192014,
-    0.8870889544486,
-]
 
 test_history = []
-i=0
-with open_session(CASE, MESH, DATA_DIR) as session:
-    for csep in csep_values_to_test:
+with open_session(CASE, MESH, DATA_DIR, residual_criteria=residual_criteria) as session:
 
         geko_params = {
-            "geko_csep": csep,
-        }
+            "geko_csep": 0.870889544487}
 
         target = objective_geko(
             geko_params=geko_params,
@@ -94,26 +95,28 @@ with open_session(CASE, MESH, DATA_DIR) as session:
             field_calc=field_calc,
             field_names=field_parameters,
             lambdas=lambdas,
+            return_details=True
         )
 
-        test_history.append({
-            "iteration": i,
-            "geko_csep": csep,
-            "target": float(target),
-        })
-        i=i+1
-        print("\nDirect test iteration", i)
-        print(f"Csep:   {csep:.13f}")
-        print(f"Target: {target:.10f}")
+        # test_history.append({
+        #     "geko_csep": geko_params["geko_csep"],
+        #     "geko_cnw": geko_params["geko_cnw"],
+        #     "target": float(target),
+        # })
+#         print(f"Csep:   {geko_params['geko_csep']:.13f}")
+#         print(f"Target: {target:.10f}")
 
 
-print("\n=== Direct Csep test history ===")
-print(f"{'Iteration':>10} | {'geko_csep':>18} | {'Target':>14}")
-print("-" * 52)
+# print("\n=== Direct Csep test history ===")
+# print(f"{'Iteration':>10} | {'geko_csep':>18} | {'geko_cnw':>18} | {'Target':>14}")
+# print("-" * 70)
 
-for row in test_history:
-    print(
-        f"{row['iteration']:>10d} | "
-        f"{row['geko_csep']:>18.13f} | "
-        f"{row['target']:>14.10f}"
-    )
+# for row in test_history:
+#     print(
+#         f"{row['iteration']:>10d} | "
+#         f"{row['geko_csep']:>18.13f} | "
+#         f"{row['geko_cnw']:>18.13f} | "
+#         f"{row['target']:>14.10f}"
+#     )
+
+print(target)

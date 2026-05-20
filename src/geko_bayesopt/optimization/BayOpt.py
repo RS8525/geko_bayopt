@@ -12,15 +12,15 @@ from geko_bayesopt.utils.periodic_hills_loader import getSimulationData
 # Bayesian optimization settings
 # -------------------------------------------------------------------------
 
-acq = acquisition.UpperConfidenceBound(kappa=2)
-
+acq_explore = acquisition.UpperConfidenceBound(kappa=2)
+acq_exploit = acquisition.UpperConfidenceBound(kappa=0.5)
 # Parameter bounds
 pbounds = {
-    "geko_csep": (0.7, 2.5),
+    "geko_csep": (0.7, 2.5)
 }
 
-number_of_sobol_sampling_points = 4
-itmax = 3 * number_of_sobol_sampling_points
+number_of_sobol_sampling_points = 8
+itmax = 30
 
 sobol_sampling_points = get_sobol_sampling_points(
     number_of_sobol_sampling_points,
@@ -29,13 +29,13 @@ sobol_sampling_points = get_sobol_sampling_points(
 
 optimizer = BayesianOptimization(
     f=None,
-    acquisition_function=acq,
+    acquisition_function=acq_explore,
     pbounds=pbounds,
     verbose=2,
     random_state=1,
 )
 
-lambdas={"field": 1.0, "integral": 1.0,"preference": 0.5}
+lambdas={"field": 1.0, "integral": 1.0,"preference": 0}
 
 field_parameters = ["cp", "Ux", "Uy"]
 
@@ -68,7 +68,7 @@ if test_case == 1:
         field_weights=field_weights
     )
 
-if test_case == 0:
+if test_case == 0: #sanity check for csep = 0.8719157334417105 and cnw=-1.6299342457205057
     from geko_bayesopt.ansys.periodic_hill.runner import run_case
 
     from pathlib import Path
@@ -76,7 +76,7 @@ if test_case == 0:
     BASE_DIR = Path(__file__).resolve().parent.parent
 
     DNS_CSEP0886 = getSimulationData(
-        BASE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.8870889544486.ascii"
+        BASE_DIR / "ansys/outputs/alpha1.0_Re5600_Csep0.870889544487.ascii" #generatted with residual criteria 1e-5
     )
     sim_coords,sim_fields=DNS_CSEP0886
 
@@ -104,6 +104,10 @@ with open_session(CASE, MESH, DATA_DIR, residual_criteria=residual_criteria) as 
         if i < number_of_sobol_sampling_points:
             next_point_to_probe = sobol_sampling_points[i]
         else:
+            if i == itmax - itmax // 4:
+                print("\nSwitching acquisition to UCB with kappa=0.5")
+                optimizer._acquisition_function = acq_exploit
+
             next_point_to_probe = optimizer.suggest()
 
         target = objective_geko(
@@ -134,7 +138,7 @@ with open_session(CASE, MESH, DATA_DIR, residual_criteria=residual_criteria) as 
 
 print("\n=== Optimization history ===")
 print(f"{'Iteration':>10} | {'geko_csep':>12} | {'Error / target':>14}")
-print("-" * 43)
+print("-" * 38)
 
 for row in history:
     print(
