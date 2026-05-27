@@ -1,1 +1,12 @@
 pyfluent == 0.2.1
+ansys-fluent-core==0.38.1
+ansys-geometry-core==0.15.2
+fluidfoam==0.2.9
+numpy==2.4.4
+scipy==1.17.1
+scikit-optimize==0.10.2
+bayesian-optimization==3.2.1
+pydantic==2.13.3
+pandas==2.3.3
+h5py==3.16.0
+matplotlib==3.10.9
