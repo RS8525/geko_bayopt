@@ -1,5 +1,5 @@
 {
-    "experiment_id": "periodic_hills_csep_pmdb_v1",
+    "experiment_id": "periodic_hills_csep_pmdb_v2",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -35,18 +35,18 @@
         "kind": "skopt_gp",
         "n_initial": 6,
         "n_iterations": 12,
-        "random_state": 25
+        "random_state": 23
     },
     "mesh": {
         "length_unit": "mm",
         "cad_route": "Workbench",
         "cad_extension": "pmdb",
         "min_size": 5,
-        "max_size": 10,
-        "growth_rate": 1.2,
+        "max_size": 15,
+        "growth_rate": 1.15,
         "curvature_normal_angle": 12,
-        "bl_first_layer_height": 1,
-        "bl_number_of_layers": 10,
+        "bl_first_layer_height": 0.5,
+        "bl_number_of_layers": 22,
         "bl_growth_rate": 1.2,
         "generate_quads": true
     },
