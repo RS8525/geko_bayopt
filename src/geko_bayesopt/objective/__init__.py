@@ -11,10 +11,9 @@ factory returns a ``LossFn`` (callable: RunResult -> float) the BO loop
 can use without knowing the internals.
 
 Registered loss kinds:
-    - "mse_cp"               -- single-field MSE (default cp)
-    - "mse_field"            -- single-field MSE, configurable field
-    - "weighted_multi_field" -- weighted sum of per-field MSE
-    - "gedcp"                -- field + integral + default-coef preference
+    - "mse" -- mean squared error between selected Fluent and DNS fields normalized by field variance
+    - "mae" -- mean absolute error between selected Fluent and DNS fieldsnormalized by field variance
+    - "mape"-- mean absolute percentage error between selected Fluent and DNS fields
 
 Add a new loss by:
     1. Writing a factory ``my_loss(dns_coords, dns_fields, *, ...) -> LossFn``.
@@ -49,6 +48,7 @@ def objective_geko(
     dns_coords: np.ndarray,
     dns_fields: dict[str, np.ndarray],
     *,
+    field_error_kind: str = "mae",
     field_names: list[str] | None = None,
     integral_weights: dict[str, float] | None = None,
     lambda_field: float = 1.0,
@@ -110,7 +110,12 @@ def objective_geko(
     if field_names is None:
         field_names = ["cp"]
 
-    field_calc = FieldErrorCalculator(dns_coords, dns_fields, field_weights)
+    field_names = [
+    fname for fname in field_names
+    if not np.isnan(np.asarray(dns_fields[fname], dtype=float)).all()
+]
+
+    field_calc = FieldErrorCalculator(dns_coords, dns_fields, kind=field_error_kind, field_weights=field_weights)
     pref_defaults = defaults if defaults is not None else GEKO_DEFAULTS
 
     # Pre-compute reference integrals once (if integral term is enabled).
@@ -188,20 +193,22 @@ def build_loss_fn(
     dns_coords: np.ndarray,
     dns_fields: dict[str, np.ndarray],
 ) -> LossFn:
-    """Construct the loss function for an experiment.
+    "Construct the loss function for an experiment."
 
-    Looks up ``objective_section.kind`` in the registry and calls the
-    matching factory with ``objective_section.options`` as keyword
-    arguments.
-    """
-    factory = _REGISTRY.get(objective_section.kind)
-    if factory is None:
-        valid = sorted(_REGISTRY.keys())
+    kind = objective_section.kind
+
+    if kind not in {"mae", "mape", "mse"}:
         raise ValueError(
-            f"Unknown objective kind: {objective_section.kind!r}. "
-            f"Valid kinds: {valid}"
+            f"Unknown objective kind: {kind!r}. "
+            "Valid kinds: ['mae', 'mape', 'mse']"
         )
-    return factory(dns_coords, dns_fields, **objective_section.options)
+
+    return objective_geko(
+        dns_coords,
+        dns_fields,
+        field_error_kind=kind,
+        **objective_section.options,
+    )
 
 
 __all__ = [

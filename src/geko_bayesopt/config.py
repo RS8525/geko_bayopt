@@ -80,10 +80,9 @@ class ObjectiveSection(BaseModel):
     ``options`` is passed to the loss factory as keyword arguments.
     """
     kind: Literal[
-        "mse_cp",
-        "mse_field",
-        "weighted_multi_field",
-        "gedcp",
+        "mae",
+        "mape",
+        "mse",
     ]
     options: dict[str, Any] = Field(default_factory=dict)
 

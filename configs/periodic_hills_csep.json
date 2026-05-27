@@ -15,7 +15,7 @@
             "zone_top": "wall",
             "zone_bottom": "wall_lower",
             "geometry_path": "data/geometry/periodic_hill_2d_alpha_1.0.dsco",
-            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/alpha1.0_Re5600_Csep1.9250309071166254_Cnw-0.7161064244265483.ascii"
+            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/alpha1.0_Re5600_Csep1.0881325727622548_Cnw0.7013147785011453.ascii"
         }
     },
     "parameters": [
@@ -23,10 +23,10 @@
         {"name": "geko_cnw", "low": -2.0, "high": 2.0}
     ],
     "objective": {
-    "kind": "gedcp",
+    "kind": "mae",
     "options": {
-        "field_names": ["cp", "Ux", "Uy"],
-        "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
+        "field_names": ["Ux", "Uy"],
+        "integral_weights": {},
         "lambda_field": 1.0,
         "lambda_integral": 0.0,
         "lambda_preference": 0.05
@@ -36,7 +36,7 @@
         "kind": "skopt_gp",
         "n_initial": 8,
         "n_iterations": 40,
-        "random_state": 25
+        "random_state": 463
     },
     "mesh": {
         "length_unit": "mm",

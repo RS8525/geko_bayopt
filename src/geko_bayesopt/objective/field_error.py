@@ -44,10 +44,12 @@ class FieldErrorCalculator:
         dns_coords: np.ndarray,
         dns_fields: dict[str, np.ndarray],
         field_weights: dict[str, float] | None = None,
+        kind: str = "mae",
     ):
         self.dns_coords = dns_coords
         self.dns_fields = dns_fields
         self.field_weights = field_weights or {}
+        self.kind = kind
 
         # Pre-compute std per DNS field so we don't recompute it every
         # trial. Falls back to eps when DNS is constant (degenerate case).
@@ -98,11 +100,21 @@ class FieldErrorCalculator:
 
         sim_valid = sim_interp[valid]
         dns_valid = dns_vals[valid]
+        diff = dns_valid - sim_valid
+        
+        if self.kind == "mae":
+            error = np.mean(np.abs(diff)) / self._dns_std[field_name]
 
-        # Normalized mean absolute error: scale-invariant across fields,
-        # no per-point denominator blow-up.
-        mae = float(np.mean(np.abs(dns_valid - sim_valid)))
-        normalized = mae / self._dns_std[field_name]
+        elif self.kind == "mape":
+            eps = 1e-8
+            denominator = np.maximum(np.abs(dns_valid), eps)
+            error = np.mean(np.abs(diff / denominator))
+
+        elif self.kind == "mse":
+            error = np.mean(diff ** 2)/ self._dns_std[field_name]**2
+
+        else:
+            raise RuntimeError(f"Unhandled field error kind: {self.kind}")
 
         weight = self.field_weights.get(field_name, 1.0)
-        return float(weight * normalized)
+        return float(weight * error)
