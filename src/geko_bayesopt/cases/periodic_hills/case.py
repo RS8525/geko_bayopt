@@ -119,9 +119,9 @@ class PeriodicHillsCase(FlowCase):
             )
 
         data = np.genfromtxt(dns_path, dtype=float)
-        coords = data[1:, 1:3]                  # x, y
-        u = data[1:, 3]                        # u
-        v = data[1:, 4]                        # v
+        coords = data[1:, 0:2]                  # x, y
+        u = data[1:, 2]                        # u
+        v = data[1:, 3]                        # v
         # data[:, 4] is w (spanwise), unused in 2D RANS comparison
         p = data[1:, 5]                        # p
 

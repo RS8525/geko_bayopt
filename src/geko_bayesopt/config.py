@@ -116,7 +116,8 @@ class MeshSection(BaseModel):
     """Optional mesh-sizing overrides. Anything not specified uses the
     defaults in ``fluent.mesh_config.MeshConfig``."""
     length_unit: str = "mm"
-    cad_route: str = "DSCO"
+    cad_route: str = "Workbench"
+    cad_extension: str = "pmdb"
     min_size: float = 0.02
     max_size: float = 0.5
     growth_rate: float = 1.2
