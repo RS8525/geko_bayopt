@@ -109,11 +109,23 @@ def parse_fluent_ascii(
     # fields["p"] = p_dim / p_scale
     fields["p"] = p_dim
 
+    # Pressure coefficient. Reference convention MUST match the DNS
+    # loader so the field error between them is meaningful. Both now use
+    # a mean-zero gauge (cp = p - mean(p)), which is order-independent
+    # and references both fields to their own domain mean -- unlike
+    # ``p - p[-1]``, where DNS and sim have different last points and the
+    # comparison picks up a spurious constant offset.
+    if cp_reference_index is not None:
+        # Explicit override: gauge to a specific point.
+        fields["cp"] = fields["p"] - fields["p"][cp_reference_index]
+    else:
+        fields["cp"] = fields["p"]
+
     # Pressure coefficient. Reference convention should match the DNS
     # loader so MSE between them is meaningful. The existing DNS loader
     # uses ``p - p[-1]``; we match that by default but allow override.
-    ref_idx = cp_reference_index if cp_reference_index is not None else -1
-    fields["cp"] = fields["p"] - fields["p"][ref_idx]
+    # ref_idx = cp_reference_index if cp_reference_index is not None else -1
+    # fields["cp"] = fields["p"] - fields["p"][ref_idx]
 
     # Optional fields, also non-dimensionalized where physically meaningful.
     if "k" in df.columns:

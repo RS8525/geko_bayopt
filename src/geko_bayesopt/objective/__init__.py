@@ -55,6 +55,7 @@ def objective_geko(
     lambda_integral: float = 1.0,
     lambda_preference: float = 0.0,
     defaults: dict[str, float] | None = None,
+    mask_hill: bool = True,
 ) -> LossFn:
     """Build the full GEDCP objective for the BO loop.
 
@@ -104,13 +105,15 @@ def objective_geko(
     """
     field_weights = {
         "Ux": 1.0,
-        "Uy":1.0,
-        "cp": 1.0, 
+        "Uy": 1.0,
+        "cp": 1.0,
     }
     if field_names is None:
         field_names = ["cp"]
 
-    field_calc = FieldErrorCalculator(dns_coords, dns_fields, field_weights)
+    field_calc = FieldErrorCalculator(
+        dns_coords, dns_fields, field_weights, mask_hill=mask_hill,
+    )
     pref_defaults = defaults if defaults is not None else GEKO_DEFAULTS
 
     # Pre-compute reference integrals once (if integral term is enabled).
