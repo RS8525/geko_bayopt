@@ -118,19 +118,20 @@ class PeriodicHillsCase(FlowCase):
                 "Expected Laizet 2021 'mean_files.dat' format."
             )
 
-        data = np.genfromtxt(dns_path, dtype=float)
-        coords = data[1:, 0:2]                  # x, y
-        u = data[1:, 2]                        # u
-        v = data[1:, 3]                        # v
-        # data[:, 4] is w (spanwise), unused in 2D RANS comparison
-        p = data[1:, 5]                        # p
+        data = np.genfromtxt(dns_path, dtype=float,skip_header=1)
+        coords = data[:, 1:3]                  # x, y
+        u = data[:, 3]                        # u
+        v = data[:, 4]                        # v
+        # data[:, 5] is w (spanwise), unused in 2D RANS comparison
+        p = data[:, 5]                        # p
 
         cp = p - p[-1]                        # match existing convention
-
+        k = data[:, 10] 
         fields = {
             "Ux": u,
             "Uy": v,
             "p": p,
             "cp": cp,
+            "turb-kinetic-energy": k,
         }
         return coords, fields

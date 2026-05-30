@@ -32,6 +32,7 @@ _FLUENT_COLUMNS = [
     "x-velocity",
     "y-velocity",
     "pressure",
+    "turb-kinetic-energy", #k
 ]
 #     "k",
 #     "omega",
@@ -116,8 +117,8 @@ def parse_fluent_ascii(
     fields["cp"] = fields["p"] - fields["p"][ref_idx]
 
     # Optional fields, also non-dimensionalized where physically meaningful.
-    if "k" in df.columns:
-        fields["k"] = df["k"].to_numpy() / (u_bulk * u_bulk)
+    if "turb-kinetic-energy" in df.columns:
+        fields["turb-kinetic-energy"] = df["turb-kinetic-energy"].to_numpy() / (u_bulk * u_bulk)
     if "omega" in df.columns:
         # Omega has units of 1/time. Non-dim by H/U_b: omega * H / U_b.
         fields["omega"] = df["omega"].to_numpy() * (hill_height / u_bulk)

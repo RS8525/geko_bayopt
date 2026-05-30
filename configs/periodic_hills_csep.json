@@ -4,27 +4,28 @@
         "kind": "periodic_hills",
         "options": {
             "alpha": 1.0,
-            "hill_height": 1.0,
+            "hill_height": 0.028,
             "ly_over_h": 3.036,
             "fluid_density": 1.0,
             "fluid_viscosity": 1.0e-5,
             "re_h": 5600,
-            "iter_count": 15,
+            "iter_count": 150,
             "zone_inlet": "inlet",
             "zone_outlet": "outlet",
             "zone_top": "wall",
             "zone_bottom": "wall_lower",
             "geometry_path": "data/geometry/periodic_hill_2d_alpha_1.0.dsco",
-            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/alpha1.0_Re5600_Csep1.0881325727622548_Cnw0.7013147785011453.ascii"
+            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/mean_files.dat"
         }
     },
     "parameters": [
-        {"name": "geko_csep", "low": 0.5, "high": 2.0}
+        {"name": "geko_csep", "low": 0.5, "high": 2.0},
+        {"name": "geko_cnw", "low": -2.0, "high": 2.0}
     ],
     "objective": {
     "kind": "mae",
     "options": {
-        "field_names": ["Ux", "Uy"],
+        "field_names": ["Ux", "Uy", "k"],
         "integral_weights": {},
         "lambda_field": 1.0,
         "lambda_integral": 0.0,
@@ -41,13 +42,13 @@
         "length_unit": "mm",
         "cad_route": "DSCO",
         "cad_extension": "dsco",
-        "min_size": 5,
-        "max_size": 10,
+        "min_size": 0.02,
+        "max_size": 0.5,
         "growth_rate": 1.2,
         "curvature_normal_angle": 12,
-        "bl_first_layer_height": 1,
-        "bl_number_of_layers": 10,
-        "bl_growth_rate": 1.2,
+        "bl_first_layer_height": 0.0009,
+        "bl_number_of_layers": 22,
+        "bl_growth_rate": 1.15,
         "generate_quads": true
     },
     "residual_criteria": {

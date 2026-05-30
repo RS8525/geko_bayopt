@@ -49,7 +49,8 @@ class PeriodicHillSolver:
     EXPORT_VARIABLES = [
         "pressure",
         "y-velocity",
-        "x-velocity"
+        "x-velocity",
+        "turb-kinetic-energy", #k
     ]
     #     "k",
     #     "omega",

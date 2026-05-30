@@ -4,18 +4,18 @@
         "kind": "periodic_hills",
         "options": {
             "alpha": 1.0,
-            "hill_height": 0.028,
+            "hill_height": 1,
             "ly_over_h": 3.035,
             "fluid_density": 1.0,
-            "fluid_viscosity": 1.0e-5,
+            "fluid_viscosity": 3.571428571e-4,
             "re_h": 2800,
-            "iter_count": 150,
+            "iter_count": 200,
             "zone_inlet": "inlet",
             "zone_outlet": "outlet",
             "zone_top": "wall",
             "zone_bottom": "wall_lower",
-            "geometry_path": "data/geometry/Periodic_Hill_Re2800.dsco",
-            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/dns_avg_Re2800.ascii"
+            "geometry_path": "data/geometry/Periodic_Hill_10_90_3035.pmdb",
+            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/dns_avg_Re2800_columnwise_organized.ascii"
         }
     },
     "parameters": [
@@ -25,7 +25,7 @@
     "objective": {
     "kind": "mae",
     "options": {
-        "field_names": [ "Ux", "Uy"],
+        "field_names": [ "Ux", "Uy", "turb-kinetic-energy" ],
         "integral_weights": {},
         "lambda_field": 1.0,
         "lambda_integral": 0.0,
@@ -35,19 +35,20 @@
     "optimizer": {
         "kind": "skopt_gp",
         "n_initial": 8,
-        "n_iterations": 2,
+        "n_iterations": 40,
         "random_state": 357
     },
     "mesh": {
         "length_unit": "mm",
-        "cad_route": "DSCO",
-        "min_size": 0.02,
-        "max_size": 0.5,
-        "growth_rate": 1.2,
+        "cad_route": "Workbench",
+        "cad_extension": "pmdb",
+        "min_size": 5,
+        "max_size": 15,
+        "growth_rate": 1.15,
         "curvature_normal_angle": 12,
-        "bl_first_layer_height": 0.0009,
+        "bl_first_layer_height": 0.5,
         "bl_number_of_layers": 22,
-        "bl_growth_rate": 1.15,
+        "bl_growth_rate": 1.2,
         "generate_quads": true
     },
     "residual_criteria": {
