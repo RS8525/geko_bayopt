@@ -50,6 +50,7 @@ def objective_geko(
     *,
     field_error_kind: str = "mae",
     field_names: list[str] | None = None,
+    field_weights: dict[str, float] | None = None,
     integral_weights: dict[str, float] | None = None,
     lambda_field: float = 1.0,
     lambda_integral: float = 1.0,
@@ -102,11 +103,15 @@ def objective_geko(
             }
         }
     """
-    field_weights = {
-        "Ux": 1.0,
-        "Uy":1.0,
-        "cp": 1.0, 
-    }
+        # Default weights
+    if field_weights is None:
+        field_weights = {
+            "Ux": 1.0,
+            "Uy": 1.0,
+            "cp": 1.0,
+            "turb-kinetic-energy": 1.0,
+            "production-of-k": 1.0,
+        }
     if field_names is None:
         field_names = ["cp"]
 
@@ -180,11 +185,9 @@ def objective_geko(
 # --------------------------------------------------------------------- #
 
 _REGISTRY = {
-    "mse_cp": mse_cp,
-    "mse_field": mse_field,
-    "weighted_multi_field": weighted_multi_field,
-    "gedcp": objective_geko,
-    # Add new losses here.
+    "mae": objective_geko,
+    "mse": objective_geko,
+    "mape": objective_geko,
 }
 
 
@@ -197,10 +200,10 @@ def build_loss_fn(
 
     kind = objective_section.kind
 
-    if kind not in {"mae", "mape", "mse"}:
+    if kind not in _REGISTRY:
         raise ValueError(
             f"Unknown objective kind: {kind!r}. "
-            "Valid kinds: ['mae', 'mape', 'mse']"
+            f"Valid kinds: {sorted(_REGISTRY.keys())}"
         )
 
     return objective_geko(

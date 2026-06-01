@@ -51,6 +51,7 @@ class PeriodicHillSolver:
         "y-velocity",
         "x-velocity",
         "turb-kinetic-energy", #k
+        "production-of-k",
     ]
     #     "k",
     #     "omega",

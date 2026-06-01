@@ -148,22 +148,20 @@ def cleanup_non_best_case_files(
     fluent_work_dir: Path,
     best_run_id: str | None,
 ) -> None:
-    """Delete all .cas.h5 / .dat.h5 / _init.cas.h5 files whose names don't
-    match the current-best run_id.
+    """Delete all .cas.h5 / .dat.h5 / _init.cas.h5 / .ascii files whose names 
+    don't match the current-best run_id.
 
-    The .ascii files are NEVER touched -- they're cheap and useful for
-    post-hoc analysis. The mesh file is also never deleted (it's shared
-    across all trials and doesn't follow the per-trial naming pattern).
+    The mesh file is never deleted (it's shared across all trials and doesn't 
+    follow the per-trial naming pattern).
 
     Parameters
     ----------
     fluent_work_dir : Path
         Directory containing the per-trial Fluent outputs.
     best_run_id : str | None
-        run_id of the current-best trial. Files starting with this prefix
-        and ending in _solved.cas.h5 / _solved.dat.h5 are preserved; all
-        others (including all _init.cas.h5) are deleted. Pass None to
-        delete everything (no preservation).
+        run_id of the current-best trial. Files starting with this prefix are 
+        preserved; all others (including all _init.cas.h5, non-best .ascii, etc.) 
+        are deleted. Pass None to delete everything (no preservation).
     """
     if not fluent_work_dir.is_dir():
         return
@@ -192,7 +190,19 @@ def cleanup_non_best_case_files(
         if name.endswith("_solved.cas.h5") or name.endswith("_solved.dat.h5"):
             path.unlink()
             deleted += 1
+            continue
+
+        # # Keep only .ascii files that match the best trial
+                # Keep only the .ascii file whose stem exactly matches the best trial
+        if path.suffix == ".ascii":
+            if best_run_id is not None and path.stem == best_run_id.strip():
+                continue
+
+            path.unlink()
+            deleted += 1
+            continue
+
 
     if deleted > 0:
         kept = best_run_id if best_run_id else "(none)"
-        print(f"[store] Cleaned {deleted} stale .cas/.dat files (kept best={kept})")
+        print(f"[store] Cleaned {deleted} stale files (kept best={kept})")

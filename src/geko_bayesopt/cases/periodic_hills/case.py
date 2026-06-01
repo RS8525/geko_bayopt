@@ -127,11 +127,14 @@ class PeriodicHillsCase(FlowCase):
 
         cp = p - p[-1]                        # match existing convention
         k = data[:, 10] 
+        prod_k = data[:, 7]
+
         fields = {
             "Ux": u,
             "Uy": v,
             "p": p,
             "cp": cp,
             "turb-kinetic-energy": k,
+            "production-of-k": prod_k,
         }
         return coords, fields
