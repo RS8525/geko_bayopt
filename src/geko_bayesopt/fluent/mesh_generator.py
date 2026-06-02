@@ -101,14 +101,14 @@ class MeshGenerator:
     # ---- Internal steps -----------------------------------------------------
 
     def _geometry_path(self) -> Path:
-        """Pick .dsco on Windows, .pmdb on Linux (Fluent constraint).
+        """Pick the extension specified in MeshConfig.
 
         If ``geometry_path`` was provided to the constructor, use that
         directly. Otherwise fall back to ``data_dir / basename.<ext>``.
         """
         if self._explicit_geometry_path is not None:
             return self._explicit_geometry_path
-        ext = "dsco" if platform.system() == "Windows" else "pmdb"
+        ext = self.mesh.cad_extension
         return self.data_dir / f"{self.case.geometry_basename}.{ext}"
 
     def _validate_inputs(self) -> None:
@@ -149,10 +149,8 @@ class MeshGenerator:
         return pyfluent.launch_fluent(ui_mode=self.ui_mode, **kwargs)
 
     def _load_cad(self, two_dim) -> None:
-        """Step 1: Load CAD Geometry. The ``DSCO`` route is critical for
-        Discovery files -- the ``Workbench`` route silently produces an
-        unmeshable shell."""
-        task = two_dim.load_cad_geometry_2d
+        """Step 1: Load CAD Geometry."""
+        task = two_dim.load_cad_geometry
         task.file_name = str(self._geometry_path())
         task.route = self.mesh.cad_route
         task.length_unit = self.mesh.length_unit
@@ -161,18 +159,18 @@ class MeshGenerator:
 
     def _update_regions(self, two_dim) -> None:
         """Step 2: Update Regions. Detects fluid regions in the CAD."""
-        two_dim.update_regions_2d()
+        two_dim.update_regions()
 
     def _update_boundaries(self, two_dim) -> None:
         """Step 3: Update Boundaries. ``label`` selection mode picks up
         named selections from the .dsco (inlet, outlet, walls)."""
-        task = two_dim.update_boundaries_2d
+        task = two_dim.update_boundaries
         task.selection_type = "label"
         task()
 
     def _define_global_sizing(self, two_dim) -> None:
         """Step 4: Define Global Sizing."""
-        task = two_dim.define_global_sizing_2d
+        task = two_dim.define_global_sizing
         task.min_size = self.mesh.min_size
         task.max_size = self.mesh.max_size
         task.growth_rate = self.mesh.growth_rate

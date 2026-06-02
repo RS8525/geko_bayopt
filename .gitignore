@@ -53,3 +53,7 @@ external/
 #Prelim scripts
 mini_tests.py
 error_calcs.py
+
+#results
+results/
+tests/

@@ -21,7 +21,8 @@ class MeshConfig:
 
     # ---- CAD reading --------------------------------------------------------
     length_unit: str = "mm"   # "m" if your Discovery file is in metres
-    cad_route: str = "DSCO"   # "DSCO" for .dsco; "Workbench" / "ACIS" / etc.
+    cad_route: str = "Workbench" # Import route: "Workbench" (for .pmdb), "DSCO" (for .dsco)
+    cad_extension: str = "pmdb"  # "pmdb" or "dsco"
 
     # ---- Bulk mesh sizing ---------------------------------------------------
     min_size: float = 0.02    # smallest edge length on curved walls
