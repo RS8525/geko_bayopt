@@ -47,8 +47,9 @@ Notes.md
 
 # External/raw datasets
 data/raw/
-data/dns/
+data/dns/periodic_hills/
 external/
+data/dns/ffs/FFS_Reh6000_SBES_Node
 
 #Prelim scripts
 mini_tests.py
@@ -56,4 +57,4 @@ error_calcs.py
 
 #results
 results/
-tests/
+tests/data/dns/ffs/*.csv

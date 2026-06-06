@@ -1,7 +1,4 @@
 pyfluent == 0.2.1
-<<<<<<< HEAD
-ansys-fluent-core == 0.35.0
-=======
 ansys-fluent-core==0.38.1
 ansys-geometry-core==0.15.2
 fluidfoam==0.2.9
@@ -13,4 +10,3 @@ pydantic==2.13.3
 pandas==2.3.3
 h5py==3.16.0
 matplotlib==3.10.9
->>>>>>> cabc36b57a4e6c15457afef79aa3a89969a00906

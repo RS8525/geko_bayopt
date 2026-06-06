@@ -22,6 +22,9 @@ class CaseConfig:
     """
 
     # ---- Identity / files ---------------------------------------------------
+    # Name override for new cases to avoid periodic hill naming
+    base_case_name: str | None = None
+    
     # Hill-shape parameter from the Laizet 2021 database.
     alpha: float = 1.0
 
@@ -43,6 +46,11 @@ class CaseConfig:
     geko_cmix: float | None = None
     geko_cjet: float | None = None
     geko_ccorner: float | None = None
+
+    # ---- FFS Specific Inlet Conditions --------------------------------------
+    inlet_velocity: float | None = None
+    turb_intensity: float | None = None
+    turb_viscosity_ratio: float | None = None
 
     # ---- Solver controls ----------------------------------------------------
     iter_count: int = 2000
@@ -81,7 +89,12 @@ class CaseConfig:
         Includes only knobs that differ from defaults, so a baseline run with
         no GEKO overrides produces a short ID.
         """
-        parts = [f"alpha{self.alpha}", f"Re{self.re_h}"]
+        parts = []
+        if self.base_case_name:
+            parts.append(self.base_case_name)
+        else:
+            parts.extend([f"alpha{self.alpha}", f"Re{self.re_h}"])
+            
         if self.geko_csep is not None:
             parts.append(f"Csep{self.geko_csep}")
         if self.geko_cnw is not None:

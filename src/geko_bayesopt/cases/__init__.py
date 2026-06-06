@@ -17,13 +17,14 @@ from ..config import CaseSection, MeshSection
 from ..fluent.mesh_config import MeshConfig
 from .base import FlowCase
 from .periodic_hills import PeriodicHillsCase
+from .ffs.case import ForwardFacingStepCase
 
 
 # Registry: case_id -> FlowCase subclass.
 _REGISTRY: dict[str, type[FlowCase]] = {
     PeriodicHillsCase.case_id: PeriodicHillsCase,
-    # Add new cases here:
-    # ForwardFacingStepCase.case_id: ForwardFacingStepCase,
+    ForwardFacingStepCase.case_id: ForwardFacingStepCase,
+    # Add new cases here.
 }
 
 

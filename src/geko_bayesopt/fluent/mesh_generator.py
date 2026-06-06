@@ -77,7 +77,12 @@ class MeshGenerator:
         )
 
         # Output path the mesh will be written to
-        self.mesh_path = self.data_dir / f"{case.geometry_basename}.msh.h5"
+        if self._explicit_geometry_path is not None:
+            base_name = self._explicit_geometry_path.stem
+        else:
+            base_name = case.geometry_basename
+            
+        self.mesh_path = self.data_dir / f"{base_name}.msh.h5"
 
     # ---- Public API ---------------------------------------------------------
 
