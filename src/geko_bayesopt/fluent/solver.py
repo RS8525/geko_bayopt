@@ -357,7 +357,7 @@ class PeriodicHillSolver:
         if trial_case.geko_cmix is not None:
             geko.cmix.value = trial_case.geko_cmix
         if trial_case.geko_cjet is not None:
-            geko.cjet.value = trial_case.geko_cjet
+            geko.cjet = trial_case.geko_cjet
         if trial_case.geko_ccorner is not None:
             geko.ccorner.value = trial_case.geko_ccorner
 

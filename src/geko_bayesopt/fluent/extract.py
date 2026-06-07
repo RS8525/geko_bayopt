@@ -127,7 +127,7 @@ def parse_fluent_ascii(
     if "wall-shear-stress" in df.columns:
         fields["wall_shear_stress"] = df["wall-shear-stress"].to_numpy() / p_scale
     if "production-of-k" in df.columns:
-        # k production has units of energy/time. Non-dim by (U_b^3 / H): prod_k * H / (U_b^3).
+        # Production of k has units of k/time = m^2/s^3. Non-dimensional scale: U_b^3 / H, so P_k* = P_k * H / U_b^3.
         fields["production-of-k"] = df["production-of-k"].to_numpy() * (hill_height / (u_bulk * u_bulk * u_bulk))
 
     return coords, fields

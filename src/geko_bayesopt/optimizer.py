@@ -49,7 +49,12 @@ def _make_skopt(
     from skopt.space import Real
 
     dimensions = [Real(p.low, p.high, name=p.name) for p in parameters]
-
+    if base_estimator == "GP":
+        from skopt.learning import GaussianProcessRegressor
+        from skopt.learning.gaussian_process.kernels import Matern
+        base_estimator = GaussianProcessRegressor(
+            kernel=Matern(nu=2.5), n_restarts_optimizer=10,
+        )
     return SkoptOptimizer(
         dimensions=dimensions,
         base_estimator=base_estimator,
