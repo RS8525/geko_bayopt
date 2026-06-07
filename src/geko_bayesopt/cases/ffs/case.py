@@ -58,10 +58,8 @@ class ForwardFacingStepCase(FlowCase):
 
         # 1. Velocity Inlet
         # Set velocity magnitude, turbulent specification method (Intensity and Viscosity Ratio)
-        solver.execute_tui(
-            f"/define/boundary-conditions/velocity-inlet {cc.zone_inlet} "
-            f"no " # Use Profile for supersonic?
-            f"no " # Use Profile for gauge total pressure? (dependent on Fluent version prompts) -- wait, let's keep it simple and sequence-agnostic if possible, or adapt to the known sequence.
+        #solver.execute_tui(
+            # Use Profile for gauge total pressure? (dependent on Fluent version prompts) -- wait, let's keep it simple and sequence-agnostic if possible, or adapt to the known sequence.
             # TUI prompts for velocity-inlet usually go:
             # Velocity Specification Method: Magnitude, Normal to Boundary
             # Reference Frame: Absolute
@@ -70,11 +68,31 @@ class ForwardFacingStepCase(FlowCase):
             # Turbulent Specification Method: Intensity and Viscosity Ratio
             # Turbulent Intensity: z
             # Turbulent Viscosity Ratio: w
-        )
+        
         
         # NOTE: A more robust way to set velocity inlet in TUI when prompts vary is to provide exactly what it asks, BUT often using the structured `solver.setup...` API is safer for standard BCs. For now, since the periodic case used TUI, let's do the standard TUI string for velocity inlet carefully. 
         # A simpler TUI sequence for setting just the magnitude and turbulence:
-        solver.execute_tui(f"/define/boundary-conditions/velocity-inlet {cc.zone_inlet} no no yes no {cc.inlet_velocity} no yes no yes intensity-and-viscosity-ratio {cc.turb_intensity} {cc.turb_viscosity_ratio}")
+        #solver.execute_tui(f"/define/boundary-conditions/velocity-inlet {cc.zone_inlet} no no yes no {cc.inlet_velocity} no yes no yes intensity-and-viscosity-ratio {cc.turb_intensity} {cc.turb_viscosity_ratio}")
+
+        
+        solver.execute_tui(f"/define/boundary-conditions/velocity-inlet {cc.zone_inlet} "
+            f"yes "  # Velocity Specification Method: Magnitude and Direction
+            f"yes "  #Reference Frame: Absolute
+            f"no "   # Use Profile for Velocity Magnitude?
+            f"{cc.inlet_velocity} "
+            f"yes "  #Use Profile for Supersonic/Initial Gauge Pressure?
+            f"no "   #Use UDF Profile for Supersonic/Initial Gauge Pressure?
+            f"yes "  #Use Profile for X-Component of Flow Direction?
+            f"no "   #Use UDF Profile for X-Component of Flow Direction?
+            f"yes "  #Use Profile for Y-Component of Flow Direction?
+            f"no "   #Use UDF Profile for Y-Component of Flow Direction?
+            f"no "   #Turbulence Specification Method: K and Omega
+            f"no "   #Turbulence Specification Method: Intensity and Length Scale
+            f"yes "  #Turbulence Specification Method: Intensity and Viscosity Ratio
+            f"{cc.turb_intensity} " #Turbulent Intensity
+            f"{cc.turb_viscosity_ratio} ") #Turbulent Viscosity Ratio
+                            
+
 
         # 2. Pressure Outlet
         # Gauge pressure = 0, with backflow turbulence definitions
