@@ -35,7 +35,8 @@
         "kind": "skopt_gp",
         "n_initial": 6,
         "n_iterations": 12,
-        "random_state": 25
+        "random_state": 25,
+        "mask_hill": true
     },
     "mesh": {
         "length_unit": "mm",

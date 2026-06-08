@@ -145,8 +145,8 @@ class FieldErrorCalculator:
     field_weights : dict[str, float], optional
         Per-field multiplicative weights. Default 1.0 for any field.
     mask_hill : bool
-        If True (default), exclude DNS points below the analytic hill
-        surface from all statistics.
+        If True (default is False), exclude DNS points below the analytic hill
+        surface from all statistics in the periodic hills example.
     domain_length : float
         Streamwise domain length in H units (default 9.0).
     """
@@ -156,7 +156,7 @@ class FieldErrorCalculator:
         dns_coords: np.ndarray,
         dns_fields: dict[str, np.ndarray],
         field_weights: dict[str, float] | None = None,
-        mask_hill: bool = True,
+        mask_hill: bool = False,
         domain_length: float = 9.0,
     ):
         self.dns_coords = dns_coords

@@ -1,12 +1,12 @@
 # geko_bayopt — Architecture Notes
 
-Living document. Update when structure changes. Code is the source of truth; this file explains the *why*.
+Living document. ALWAYS Update when structure changes. Code is the source of truth; this file explains the *why*.
 
 ---
 
 ## Project goal
 
-Bayesian optimization of the GEKO turbulence-model coefficients in ANSYS Fluent, scored against DNS reference data. Single-machine, single-user, thesis-scale. One flow case today (periodic hill); more later (forward-facing step, etc.).
+Bayesian optimization of the GEKO turbulence-model coefficients in ANSYS Fluent, scored against DNS reference data. Single-machine, single-user, thesis-scale. Two flow cases implemented today (periodic hill, forward-facing step); more can be added easily.
 
 ---
 
@@ -46,8 +46,10 @@ src/geko_bayesopt/
 │
 ├── cases/                  Per-flow-case knowledge
 │   ├── base.py             FlowCase abstract base class
-│   └── periodic_hills/
-│       └── case.py         PeriodicHillsCase (BCs + Laizet DNS loader)
+│   ├── periodic_hills/
+│   │   └── case.py         PeriodicHillsCase (BCs + Laizet DNS loader)
+│   └── ffs/
+│       └── case.py         ForwardFacingStepCase (Velocity inlet + Pressure outlet)
 │
 └── objective/              Loss functions
     ├── field_error.py      FieldErrorCalculator (core MSE math)
@@ -169,13 +171,14 @@ The solver (`fluent/solver.py`) is case-agnostic; it calls `flow_case.apply_boun
 
 These are baked into `fluent/`:
 
-- `cad_route="DSCO"` for `.dsco` files. The `"Workbench"` route silently produces unmeshable shells with zero cells.
+- `cad_route="DSCO"` + `cad_route="disco"` for `.dsco` files. The `"Workbench"` + `"pmdb"` route is used for `.pmdb` files.
 - `two_dim.write_2d_mesh` (workflow task), NOT `tui.file.write_mesh` (the latter produces files the solver rejects as "surface mesh").
 - Mesh write is sanity-checked for file size > 0.5 MB to catch silent failures.
 - `version="2d"` must NOT be passed to `launch_fluent` with `mode="meshing"` — that combination silently switches to the solver and breaks the workflow.
 - GEKO coefficients live at `solver.settings.setup.models.viscous.geko.<coef>.value` on Fluent 2026 R1.
 - Periodic forcing uses `/define/periodic-conditions/massflow-rate-specification?` with raw TUI (the structured paths drift between Fluent versions).
 - Student license allows only one Fluent session at a time. If you see "Connection refused" on launch, check Task Manager for stray `fluent.exe` processes.
+- For the Forward-Facing Step case `"mask_hill": false` is required to avoid a Fluent error about "overlapping periodic interfaces". This is a quirk of the FFS geometry, which has a small ledge at the inlet that collides with the periodic interface. The hill mask (which zeros out the loss contribution from the hill region) is not needed for FFS since the ledge doesn't affect the loss.
 
 ---
 
@@ -183,6 +186,5 @@ These are baked into `fluent/`:
 
 - Parallel trials (sequential only)
 - BoTorch backend (skopt only; add via `optimizer.py::build_optimizer` when needed)
-- Forward-facing step or other cases (architectural slot exists; no code yet)
 - Mesh sensitivity studies (mesh is fixed at experiment start)
 - Anything ML beyond skopt (no PyTorch, no JAX)
