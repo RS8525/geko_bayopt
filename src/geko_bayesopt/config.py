@@ -106,7 +106,7 @@ class ResidualCriteria(BaseModel):
 
 class OptimizerSection(BaseModel):
     """Selects the optimizer and its general settings."""
-    kind: Literal["skopt_gp", "skopt_rf", "random"]
+    kind: Literal["skopt_gp", "skopt_rf", "random", "nelder_mead"]
     n_initial: int = 8
     n_iterations: int = 32
     random_state: int | None = 42
