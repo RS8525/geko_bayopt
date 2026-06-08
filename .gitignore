@@ -57,5 +57,4 @@ error_calcs.py
 
 #results
 results/
-tests/
 data/dns/ffs/*.csv
