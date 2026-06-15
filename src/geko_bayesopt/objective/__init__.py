@@ -106,7 +106,9 @@ def objective_geko(
     field_weights = {
         "Ux": 1.0,
         "Uy": 1.0,
-        "cp": 1.0,
+        "cp": 5.0,
+        "diss": 1.0,
+        "vor": 1.0
     }
     if field_names is None:
         field_names = ["cp"]

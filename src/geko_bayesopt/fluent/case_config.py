@@ -37,12 +37,13 @@ class CaseConfig:
     re_h: int = 5600
 
     # ---- GEKO tunable coefficients (None -> Fluent default) -----------------
-    # Defaults: Csep=1.75, Cnw=0.5, Cmix=0.0, Cjet=0.9, Ccorner=1.0
+    # Defaults: Csep=1.75, Cnw=0.5, Cmix=0.0, Cjet=0.9, Ccorner=1.0, Cturb=2.0
     geko_csep: float | None = None
     geko_cnw: float | None = None
     geko_cmix: float | None = None
     geko_cjet: float | None = None
     geko_ccorner: float | None = None
+    geko_cturb: float | None = None
 
     # ---- Solver controls ----------------------------------------------------
     iter_count: int = 2000
@@ -77,19 +78,28 @@ class CaseConfig:
     @property
     def case_id(self) -> str:
         """Filename-safe identifier that disambiguates parameter sweeps.
-
+ 
         Includes only knobs that differ from defaults, so a baseline run with
-        no GEKO overrides produces a short ID.
+        no GEKO overrides produces a short ID. Coefficient values are rounded
+        to 4 decimal places to prevent Windows MAX_PATH (260 chars) errors
+        when all four coefficients appear in the filename with full precision.
         """
+        def fmt(v: float) -> str:
+            # 4 d.p. is sufficient to uniquely identify BO proposals while
+            # keeping each token to at most ~10 characters.
+            return f"{v:.4f}".rstrip("0").rstrip(".")
+ 
         parts = [f"alpha{self.alpha}", f"Re{self.re_h}"]
         if self.geko_csep is not None:
-            parts.append(f"Csep{self.geko_csep}")
+            parts.append(f"Csep{fmt(self.geko_csep)}")
         if self.geko_cnw is not None:
-            parts.append(f"Cnw{self.geko_cnw}")
+            parts.append(f"Cnw{fmt(self.geko_cnw)}")
         if self.geko_cmix is not None:
-            parts.append(f"Cmix{self.geko_cmix}")
+            parts.append(f"Cmix{fmt(self.geko_cmix)}")
         if self.geko_cjet is not None:
-            parts.append(f"Cjet{self.geko_cjet}")
+            parts.append(f"Cjet{fmt(self.geko_cjet)}")
         if self.geko_ccorner is not None:
-            parts.append(f"Ccorner{self.geko_ccorner}")
+            parts.append(f"Ccorner{fmt(self.geko_ccorner)}")
+        if self.geko_cturb is not None:
+            parts.append(f"Cturb{fmt(self.geko_cturb)}")
         return "_".join(parts)
