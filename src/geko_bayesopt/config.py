@@ -48,7 +48,7 @@ class ParameterSpec(BaseModel):
 
     The ``name`` must match a field on ``fluent.case_config.CaseConfig``,
     e.g. ``geko_csep``, ``geko_cnw``, ``geko_cmix``, ``geko_cjet``,
-    ``geko_ccorner``.
+    ``geko_ccorner``, ``geko_cturb``.
     """
     name: str
     low: float

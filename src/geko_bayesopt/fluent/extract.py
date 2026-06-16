@@ -130,11 +130,11 @@ def parse_fluent_ascii(
     # Optional fields, also non-dimensionalized where physically meaningful.
     if "k" in df.columns:
         fields["k"] = df["k"].to_numpy() / (u_bulk * u_bulk)
-    if "omega" in df.columns:
+    if "turb-diss-rate" in df.columns:
         # Omega has units of 1/time. Non-dim by H/U_b: omega * H / U_b.
-        fields["omega"] = df["omega"].to_numpy() * (hill_height / u_bulk)
+        fields["diss"] = df["turb-diss-rate"].to_numpy() * (hill_height / u_bulk)
     if "vorticity-mag" in df.columns:
-        fields["vorticity_mag"] = df["vorticity-mag"].to_numpy() * (hill_height / u_bulk)
+        fields["vor"] = df["vorticity-mag"].to_numpy() * (hill_height / u_bulk)
     if "wall-shear-stress" in df.columns:
         fields["wall_shear_stress"] = df["wall-shear-stress"].to_numpy() / p_scale
 

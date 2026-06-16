@@ -232,7 +232,18 @@ class FieldErrorCalculator:
         if field_name == "cp":
             sim_v = sim_v - _wmean(sim_v, w)
 
-        mae = _wmean(np.abs(dns_v - sim_v), w)
-        normalized = mae / self._dns_std[field_name]
+        """Uncomment this part if you want to use the 1-norm"""
+        # mae = _wmean(np.abs(dns_v - sim_v), w)
+        # normalized = mae / self._dns_std[field_name]
+
+        """Comment the lines to use another norm (weighted 2-norm is used bellow)"""
+        # 1. Square the differences instead of taking the absolute value
+        squared_diff = (dns_v - sim_v) ** 2
+        
+        # 2. Compute the weighted Mean Squared Error Weighted (MSEW)
+        mse = _wmean(squared_diff, w)
+        
+        # 3. Take the square root to yield the 2-norm (RMSEW)
+        normalized = np.sqrt(mse)/ self._dns_std[field_name]
 
         return float(self.field_weights.get(field_name, 1.0) * normalized)

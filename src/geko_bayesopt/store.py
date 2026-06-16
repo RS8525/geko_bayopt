@@ -192,6 +192,16 @@ def cleanup_non_best_case_files(
         if name.endswith("_solved.cas.h5") or name.endswith("_solved.dat.h5"):
             path.unlink()
             deleted += 1
+        
+        # # Keep only .ascii files that match the best trial
+        # Keep only the .ascii file whose stem exactly matches the best trial
+        if path.suffix == ".ascii":
+            if best_run_id is not None and path.stem == best_run_id.strip():
+                continue
+
+            path.unlink()
+            deleted += 1
+            continue
 
     if deleted > 0:
         kept = best_run_id if best_run_id else "(none)"

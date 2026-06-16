@@ -356,9 +356,11 @@ class PeriodicHillSolver:
         if trial_case.geko_cmix is not None:
             geko.cmix.value = trial_case.geko_cmix
         if trial_case.geko_cjet is not None:
-            geko.cjet.value = trial_case.geko_cjet
+            geko.cjet = trial_case.geko_cjet
         if trial_case.geko_ccorner is not None:
             geko.ccorner.value = trial_case.geko_ccorner
+        if trial_case.geko_cturb is not None:
+            geko.auxiliary_constants.cbf_tur = trial_case.geko_cturb
 
     def _setup_material(self) -> None:
         air = self._solver.settings.setup.materials.fluid["air"]
