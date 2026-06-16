@@ -1,0 +1,9 @@
+ansys-api-geometry==0.4.92
+ansys-fluent-core==0.38.1
+cadquery==2.7.0
+numpy==2.4.4
+scipy==1.17.1
+matplotlib==3.10.9
+pandas==2.3.3
+pyvista==0.43.10
+ansys-geometry-core==0.4.92

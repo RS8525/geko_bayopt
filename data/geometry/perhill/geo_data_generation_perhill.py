@@ -1,4 +1,4 @@
-from geko_bayesopt.ansys.periodic_hill.geometry_generation.periodic_hill_geom import create_perhill_geom_ansys
+from geometry.perhill.periodic_hill_geom import create_perhill_geom_ansys
 
 # List of cases with alpha, L, and ceiling_param values
 cases = [
