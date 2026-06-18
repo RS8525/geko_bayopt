@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SIM_PATH = (
     REPO_ROOT
     / "results/fluent/periodic_hills_2800_v1"
-    / "alpha1.0_Re2800_Csep0.8557517256760887_Cnw0.500973460097605.ascii"
+    / "alpha1.0_Re2800_Csep1.0539614348602349_Cnw2.0_Cmix0.46039441259276553_Cjet0.884168342743064_Cturb1.6647.ascii"
 )
 DNS_PATH = (
     REPO_ROOT
@@ -38,6 +38,8 @@ FIELD_MAP = {
     "Ux": ("x-velocity", "x-velocity"),
     "Uy": ("y-velocity", "y-velocity"),
     "turb-kinetic-energy": ("k", "turb-kinetic-energy"),
+    "production-of-k": ("production", "production-of-k"),
+    "viscosity-turb": ("viscosity-turb", "viscosity-turb"),
 }
 
 X_TOL = 0.1  # tolerance for selecting points near a given x
@@ -46,6 +48,13 @@ X_TOL = 0.1  # tolerance for selecting points near a given x
 def load_data(sim_path: Path, dns_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     sim = pd.read_csv(sim_path, sep=r"\s+")
     dns = pd.read_csv(dns_path, sep=r"\s+")
+    k = dns["k"].to_numpy()
+    eps = dns["dissipation"].to_numpy()
+    rho = dns["density"].to_numpy()
+
+    eps_safe = np.where(eps > 1e-12, eps, np.nan)
+
+    dns["viscosity-turb"] = rho * 0.09 * k**2 / eps_safe
     return sim, dns
 
 
@@ -66,7 +75,7 @@ def plot_profiles(
         x positions at which to extract profiles.
     fields : list of str
         Physical fields to plot. Each must be a key in FIELD_MAP.
-        Accepted values: 'Ux', 'Uy', 'turb-kinetic-energy'.
+        Accepted values: 'Ux', 'Uy', 'turb-kinetic-energy', 'production-of-k'.
     sim : pd.DataFrame
         Simulation data.
     dns : pd.DataFrame
@@ -102,6 +111,7 @@ def plot_profiles(
                 sim_slice["y-coordinate"],
                 color="tab:red",
                 linewidth=1.5,
+                alpha=0.7,
                 label="Simulation",
             )
             ax.plot(
@@ -109,6 +119,7 @@ def plot_profiles(
                 dns_slice["y-coordinate"],
                 color="tab:blue",
                 linewidth=1.5,
+                alpha=0.7,
                 label="DNS",
             )
 
@@ -134,8 +145,8 @@ def plot_profiles(
 # Entry point — configure here
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    X_LOCATIONS = [2.0, 4.5, 7.0]
-    FIELDS = ["Ux", "Uy", "turb-kinetic-energy"]
+    X_LOCATIONS = [2.0, 4.5, 8.0]
+    FIELDS = ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "viscosity-turb"]
 
     sim, dns = load_data(SIM_PATH, DNS_PATH)
     plot_profiles(X_LOCATIONS, FIELDS, sim, dns)

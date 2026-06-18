@@ -52,6 +52,7 @@ class PeriodicHillSolver:
         "x-velocity",
         "turb-kinetic-energy", #k
         "production-of-k",
+        "viscosity-turb",
     ]
     #     "k",
     #     "omega",
@@ -360,6 +361,8 @@ class PeriodicHillSolver:
             geko.cjet = trial_case.geko_cjet
         if trial_case.geko_ccorner is not None:
             geko.ccorner.value = trial_case.geko_ccorner
+        if trial_case.geko_cturb is not None:
+            geko.auxiliary_constants.cbf_tur = trial_case.geko_cturb
 
     def _setup_material(self) -> None:
         air = self._solver.settings.setup.materials.fluid["air"]
@@ -382,6 +385,19 @@ class PeriodicHillSolver:
             self._solver.settings.solution.methods.p_v_coupling.flow_scheme = "Coupled"
         except Exception:
             self._solver.tui.solve.set.p_v_coupling(24)
+        
+        # try:
+        #     # Forçar o esquema QUICK para o Momentum (crucial para a colina periódica)
+        #     self._solver.settings.solution.methods.spatial_discretization.momentum = "quick"
+        #     # Manter k e omega em 2ª ordem
+        #     self._solver.settings.solution.methods.spatial_discretization.turb_kinetic_energy = "second-order-upwind"
+        #     self._solver.settings.solution.methods.spatial_discretization.specific_diss_rate = "second-order-upwind"
+        # except Exception:
+        #     # Fallback TUI caso a versão da API falhe
+        #     # 6 = QUICK, 1 = Second Order Upwind
+        #     self._solver.execute_tui("/solve/set/discretization-scheme/mom 6")
+        #     self._solver.execute_tui("/solve/set/discretization-scheme/k 1")
+        #     self._solver.execute_tui("/solve/set/discretization-scheme/omega 1")
 
     def _setup_residual_monitors(self) -> None:
         """Set residual convergence criteria for Fluent.

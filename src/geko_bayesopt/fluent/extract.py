@@ -129,6 +129,9 @@ def parse_fluent_ascii(
     if "production-of-k" in df.columns:
         # Production of k has units of k/time = m^2/s^3. Non-dimensional scale: U_b^3 / H, so P_k* = P_k * H / U_b^3.
         fields["production-of-k"] = df["production-of-k"].to_numpy() * (hill_height / (u_bulk * u_bulk * u_bulk))
+    if "viscosity-turb" in df.columns:
+        # Turbulent viscosity has units of m^2/s. Non-dim by U_b * H.
+        fields["viscosity-turb"] = df["viscosity-turb"].to_numpy() / (u_bulk * hill_height)
 
     return coords, fields
 

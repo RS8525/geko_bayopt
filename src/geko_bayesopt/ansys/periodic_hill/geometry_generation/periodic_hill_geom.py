@@ -30,7 +30,7 @@ Can be editied in line the third line after the start of the create_perhill_geom
 
 import os
 import numpy as np
-import cadquery as cq
+#import cadquery as cq
 from pathlib import Path
 from typing import List, Union
 
@@ -108,7 +108,7 @@ def generate_periodic_hill_shape(alpha: float = 1.0, L: float = 9.0) -> list[Poi
     
     return [Point2D([x, y]) for x, y in zip(x_pts, y_pts)]
 
-def create_perhill_geom_ansys(alpha: float = 1.0, L: float = 9.0, ceiling_param: float = 3.036):
+def create_perhill_geom_ansys(alpha: float = 1.0, L: float = 9.0, ceiling_param: float = 3.035):
     # Instantiate the modeler, usning "insecure" transport mode for local execution. 
     # Runs faster but might be instable. Adjust the version as needed.
     modeler = launch_modeler(mode="spaceclaim", version=-261, transport_mode=None)

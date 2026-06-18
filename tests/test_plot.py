@@ -72,6 +72,9 @@ def plot_dns_data(case_name, output_dir):
     uy = data[:, 4]
     k= data[:, 10]
     prod_k = data[:, 7]
+    diss= data[:, 8]
+    density = data[:,6]
+    turb_visc = 0.09*density*k**2/diss
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -119,6 +122,17 @@ def plot_dns_data(case_name, output_dir):
     ax.grid(True)
     fig.savefig(os.path.join(output_dir, f'dns_{case_name}_prod_k.png'))
 
+    # Plot turbulent viscosity
+    fig, ax = plt.subplots(figsize=(10, 6))
+    tcf = plot_field(ax, x_coords, y_coords, turb_visc, cmap='viridis')
+    fig.colorbar(tcf, ax=ax, label='Turbulent Viscosity')
+    ax.set_xlabel('X Coordinate')
+    ax.set_ylabel('Y Coordinate')
+    ax.set_title(f'DNS Turbulent Viscosity for {case_name}')
+    ax.axis("equal")
+    ax.grid(True)
+    fig.savefig(os.path.join(output_dir, f'dns_{case_name}_viscosity_turb.png'))
+
 
 def plot_and_save_simulation_data(sim_file_path, output_dir):
     """
@@ -132,11 +146,11 @@ def plot_and_save_simulation_data(sim_file_path, output_dir):
     sim_data = np.genfromtxt(sim_file_path, dtype=float, skip_header=1, delimiter=None)
     x_coords = sim_data[:, 1]
     y_coords = sim_data[:, 2]
-    ux = sim_data[:, 5]
-    uy = sim_data[:, 6]
-    k = sim_data[:, 4]
-    prod_k = sim_data[:, 3]
-
+    ux = sim_data[:, 6]
+    uy = sim_data[:, 7]
+    k = sim_data[:, 5]
+    prod_k = sim_data[:, 4]
+    turb_visc = sim_data[:, 3]
     os.makedirs(output_dir, exist_ok=True)
 
     # Plot Ux
@@ -187,6 +201,18 @@ def plot_and_save_simulation_data(sim_file_path, output_dir):
     fig.savefig(os.path.join(output_dir, 'simulation_prod_k.png'))
     plt.close(fig)
 
+    # Plot Turbulent Viscosity
+    fig, ax = plt.subplots(figsize=(10, 6))
+    tcf = plot_field(ax, x_coords, y_coords, turb_visc, cmap='viridis')
+    fig.colorbar(tcf, ax=ax, label='Turbulent Viscosity')
+    ax.set_xlabel('X Coordinate')
+    ax.set_ylabel('Y Coordinate')
+    ax.set_title('Simulation Turbulent Viscosity')
+    ax.axis("equal")
+    ax.grid(True)
+    fig.savefig(os.path.join(output_dir, 'simulation_viscosity_turb.png'))
+    plt.close(fig)
+
 if __name__ == "__main__":
     output_directory = os.path.abspath(
         os.path.join(
@@ -208,7 +234,7 @@ if __name__ == "__main__":
             "results",
             "fluent",
             "periodic_hills_2800_v1",
-            "alpha1.0_Re2800_Csep1.0207955748001365_Cnw0.8437503761014433_Cmix0.49642554136187106.ascii",
+            "alpha1.0_Re2800_Csep0.8792651357318878_Cnw0.4951539148481734.ascii",
         )
     )
 

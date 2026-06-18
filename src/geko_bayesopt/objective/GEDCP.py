@@ -32,6 +32,7 @@ GEKO_DEFAULTS: dict[str, float] = {
     "geko_cmix": 0.0,
     "geko_cjet": 0.9,
     "geko_ccorner": 1.0,
+    "geko_cturb": 2.0,
 }
 
 

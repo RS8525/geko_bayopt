@@ -43,6 +43,7 @@ class CaseConfig:
     geko_cmix: float | None = None
     geko_cjet: float | None = None
     geko_ccorner: float | None = None
+    geko_cturb: float | None = None
 
     # ---- Solver controls ----------------------------------------------------
     iter_count: int = 2000
@@ -81,6 +82,11 @@ class CaseConfig:
         Includes only knobs that differ from defaults, so a baseline run with
         no GEKO overrides produces a short ID.
         """
+        def fmt(v: float) -> str:
+            # 4 d.p. is sufficient to uniquely identify BO proposals while
+            # keeping each token to at most ~10 characters.
+            return f"{v:.4f}".rstrip("0").rstrip(".")
+        
         parts = [f"alpha{self.alpha}", f"Re{self.re_h}"]
         if self.geko_csep is not None:
             parts.append(f"Csep{self.geko_csep}")
@@ -92,4 +98,6 @@ class CaseConfig:
             parts.append(f"Cjet{self.geko_cjet}")
         if self.geko_ccorner is not None:
             parts.append(f"Ccorner{self.geko_ccorner}")
+        if self.geko_cturb is not None:
+            parts.append(f"Cturb{fmt(self.geko_cturb)}")
         return "_".join(parts)

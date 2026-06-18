@@ -1,0 +1,113 @@
+Auto-Transcript Start Time:  13:47:07, 30 May 2026 Hora de Verão da Europa Oeste 
+Current Directory: "C:\Users\Goncalo\Desktop\TUM\CS\rep\geko_bayopt\src\geko_bayesopt\ansys\outputs"
+
+              Welcome to ANSYS Fluent 2026 R1
+
+              Copyright 2026 Synopsys, Inc. and ANSYS, Inc. All rights reserved.
+              Unauthorized use, distribution or duplication is prohibited.
+              This product is subject to U.S. laws governing export and re-export.
+              For full Legal Notice, see documentation.
+
+Build Time: Feb  2 2026 16:27:16 EST  Build Id: 10262  
+ 
+Connected License Server List:	<Non FlexNet Publisher License Server (FNPLS)>
+
+*********************************************
+Info: Your license enables 4-way parallel execution.
+For faster simulations, please start the application with the appropriate parallel options.
+*********************************************
+
+
+     --------------------------------------------------------------
+     This is a student version of ANSYS FLUENT. Usage of this product
+     license is limited to the terms and conditions specified in your ANSYS
+     license form, additional terms section.
+     --------------------------------------------------------------
+Host spawning Node 0 on machine "DESKTOP-CLNF80J" (win64).
+Host waiting for connection from Node 0 at 127.0.0.1:57182 
+
+Node 0 connecting to the Host ... connection established.
+
+------------------------------------------------------------------------------------------
+ID    Hostname         Core  O.S.         PID    CPU Model Name                          
+------------------------------------------------------------------------------------------
+n1    DESKTOP-CLNF80J  2/20  Windows-x64  41980  12th Gen Intel(R) Core(TM) i7-12700H    
+n0*   DESKTOP-CLNF80J  1/20  Windows-x64  14624  12th Gen Intel(R) Core(TM) i7-12700H    
+host  DESKTOP-CLNF80J        Windows-x64  9540   12th Gen Intel(R) Core(TM) i7-12700H    
+
+MPI Option Selected: intel
+Selected system interconnect: default
+------------------------------------------------------------------------------------------
+
+Cleanup script file is C:\\Users\\Goncalo\\Desktop\\TUM\\CS\\rep\\geko_bayopt\\src\\geko_bayesopt\\ansys\\outputs\\cleanup-fluent-DESKTOP-CLNF80J-9540.bat
+Note: Rank = 0: Process affinity not being set (6).
+Note: Rank = 1: Process affinity not being set (6).
+
+Graphics driver currently in use: dx11
+
+
+Posting ANSYS Product Improvement Program startup data
+Done.
+
+> (cx-gui-do cx-activate-item "Key Behavioral Changes*PanelButtons*PushButton2(Cancel)")
+(cx-gui-do cx-activate-item "MenuBar*ReadSubMenu*Mesh...")
+(cx-gui-do cx-activate-item "MenuBar*ReadSubMenu*Case...")
+(cx-use-window-id 51)
+(cx-gui-do cx-activate-item "MenuBar*ReadSubMenu*Case...")
+(cx-gui-do cx-set-file-dialog-entries "Select File" '( "C:/Users/Goncalo/Desktop/TUM/CS/rep/geko_bayopt/results/fluent/periodic_hills_2800_v1/alpha1.0_Re2800_Csep0.5_Cnw0.5014567225813478_solved.cas.h5") "CFF Case Files (*.cas.h5 *.msh.h5 *.MSH.h5 )")
+Fast-loading "C:\PROGRA~1\ANSYSI~1\ANSYSS~1\v261\fluent\fluent26.1.0\\addons\afd\lib\hdfio.bin"
+Done.
+
+Reading from DESKTOP-CLNF80J:"C:/Users/Goncalo/Desktop/TUM/CS/rep/geko_bayopt/results/fluent/periodic_hills_2800_v1/alpha1.0_Re2800_Csep0.5_Cnw0.5014567225813478_solved.cas.h5" in NODE0 mode ...
+  Reading mesh ...
+      133086 cells,     1 cell zone  ...
+         133086 mixed cells,  zone id: 2599
+      267398 faces,     7 face zones ...
+            303 mixed periodic faces,  zone id: 1
+            600 2D wall faces,  zone id: 1114
+            164 2D interface faces,  zone id: 1115
+            723 2D wall faces,  zone id: 1482
+            164 2D interface faces,  zone id: 1483
+         265141 2D interior faces,  zone id: 7230
+            303 mixed shadow faces,  zone id: 2
+      133707 nodes,     1 node zone  ...
+Warning: reading 4 partition grid onto 2 compute node machine.
+         Combining every 2 partitions.
+  Done.
+
+
+Building...
+     mesh
+	distributing mesh
+		pairs..,
+		parts..,
+		faces..,
+		nodes..,
+		shadow nodes..,
+		cells..,
+        bandwidth reduction using Reverse Cuthill-McKee: 59463/191 = 311.325
+     materials,
+     interface,
+     domains,
+	mixture
+     zones,
+	interior:fb5900e3-d273-43d7-bfb9-df84d36310b9_fluid
+	ceiling
+	hill
+	inlet
+	outlet
+	alpha1.0_re2800
+	fb5900e3-d273-43d7-bfb9-df84d36310b9_fluid
+     mesh interfaces,
+     parallel,
+Done.
+(cx-gui-do cx-activate-item "MenuBar*ExportSubMenu*Solution Data...")
+(cx-gui-do cx-set-list-selections "Export*Table1*Table1*DropDownList2(File Type)" '( 1))
+(cx-gui-do cx-activate-item "Export*Table1*Table1*DropDownList2(File Type)")
+(cx-gui-do cx-activate-item "Export*PanelButtons*PushButton2(Cancel)")
+/exit y
+
+Posting ANSYS Product Improvement Program performance data 
+Done.
+Auto-Transcript Stop Time:  13:56:30, 30 May 2026 Hora de Verão da Europa Oeste 
+Total Transcript Time: 9 Minute 22 Second.
