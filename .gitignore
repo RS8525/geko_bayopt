@@ -58,3 +58,7 @@ error_calcs.py
 #results
 results/
 data/dns/ffs/*.csv
+
+# FFS plot configs
+tests/plots/*.json
+!tests/plots/ffs_default.json

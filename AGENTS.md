@@ -188,3 +188,12 @@ These are baked into `fluent/`:
 - BoTorch backend (skopt only; add via `optimizer.py::build_optimizer` when needed)
 - Mesh sensitivity studies (mesh is fixed at experiment start)
 - Anything ML beyond skopt (no PyTorch, no JAX)
+
+---
+
+## Test plotting helper
+
+- `tests/plot_ffs_fields.py` is a standalone plotting helper for FFS DNS/simulation data.
+- Configuration lives in `tests/plots/*.json`, and figures are written to `tests/plots/<config-name>/`.
+- It does not participate in the main `src/geko_bayesopt` config flow.
+- Keep each JSON config in sync with the specific DNS and simulation exports you want to inspect.
