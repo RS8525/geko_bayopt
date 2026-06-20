@@ -25,7 +25,7 @@
     "objective": {
         "kind": "gedcp",
         "options": {
-            "field_names": ["cp", "Ux", "Uy"],
+            "field_names": ["cp", "Ux", "Uy", "cturb"],
             "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
             "lambda_field": 1.0,
             "lambda_integral": 0.0,
@@ -36,7 +36,7 @@
     "optimizer": {
         "kind": "skopt_gp",
         "n_initial": 6,
-        "n_iterations": 2,
+        "n_iterations": 20,
         "random_state": 23
     }, 
     "mesh": {
@@ -50,7 +50,8 @@
         "bl_first_layer_height": 0.002,
         "bl_number_of_layers": 20,
         "bl_growth_rate": 1.2,
-        "generate_quads": true
+        "generate_quads": true,
+        "comment": "Mesh is a bit too fine roughly 500k cells"
     },
     "residual_criteria": {
         "continuity": 1.0e-5,

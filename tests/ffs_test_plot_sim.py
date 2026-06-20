@@ -11,7 +11,7 @@ import matplotlib.tri as mtri
 import numpy as np
 
 
-ASCII_PATH = Path(__file__).resolve().parents[1] / "results" / "fluent" / "ffs_csep_v2" / "ffs_Csep1.8381942502701671.ascii"
+ASCII_PATH = Path(__file__).resolve().parents[1] / "results" / "fluent" / "ffs_csep_v3" / "alpha1.0_Re6000_Csep0.9407.ascii"
 OUTPUT_DIR = Path(__file__).resolve().parent / "results" / "plots"
 
 

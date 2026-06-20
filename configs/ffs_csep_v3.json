@@ -1,5 +1,5 @@
 {
-    "experiment_id": "ffs_csep_v1",
+    "experiment_id": "ffs_csep_v3",
     "case": {
         "kind": "ffs",
         "options": {
@@ -8,14 +8,14 @@
             "fluid_viscosity": 0.01424275,
             "inlet_velocity": 10.0,
             "turb_intensity": 3.25,
-            "turb_viscosity_ratio": 12.0,
             "re_h": 6000,
-            "iter_count": 200,
+            "turb_viscosity_ratio": 12.0,
+            "iter_count": 1000,
             "zone_inlet": "inlet",
             "zone_outlet": "outlet",
             "zone_top": "ceiling",
             "zone_bottom": "step",
-            "geometry_path": "data/geometry/ffs/FFS_3_2d.dsco",
+            "geometry_path": "data/geometry/ffs/FFS_3_2d_v2.dsco",
             "dns_path": "data/dns/ffs/FFS_Reh6000_SBES_Node_2D.csv"
         }
     },
@@ -25,7 +25,7 @@
     "objective": {
         "kind": "gedcp",
         "options": {
-            "field_names": ["cp", "Ux", "Uy", "cturb"],
+            "field_names": ["cp", "Ux", "Uy"],
             "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
             "lambda_field": 1.0,
             "lambda_integral": 0.0,
@@ -36,22 +36,22 @@
     "optimizer": {
         "kind": "skopt_gp",
         "n_initial": 6,
-        "n_iterations": 2,
+        "n_iterations": 20,
         "random_state": 23
-    },
+    }, 
     "mesh": {
         "length_unit": "mm",
         "cad_route": "DSCO",
         "cad_extension": "dsco",
-        "min_size": 0.01,
-        "max_size": 0.07,
+        "min_size": 0.05,
+        "max_size": 0.25,
         "growth_rate": 1.12,
         "curvature_normal_angle": 8,
         "bl_first_layer_height": 0.002,
-        "bl_number_of_layers": 20,
+        "bl_number_of_layers": 30,
         "bl_growth_rate": 1.2,
         "generate_quads": true,
-        "comment": "Mesh is a bit to fine roughly 1mio cells"
+        "comment": ""
     },
     "residual_criteria": {
         "continuity": 1.0e-5,
