@@ -20,15 +20,19 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
+from scipy.spatial import cKDTree
 
-
+# To use the working, copy default and rename to working, edit as wanted changes will be ignored on the working config by git.
 BASE_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "plots" / "ffs_default.json"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "plots" / "ffs_working.json"
 
 SIM_CMAP = "viridis"
 DNS_CMAP = "viridis"
@@ -137,12 +141,51 @@ def _interpolate_dns_to_sim(
     sim_x: np.ndarray,
     sim_y: np.ndarray,
 ) -> np.ndarray:
-    """Interpolate DNS values onto the simulation points."""
+    """Interpolate DNS values onto the simulation points.
 
-    dns_tri = mtri.Triangulation(dns_x, dns_y)
-    interpolator = mtri.LinearTriInterpolator(dns_tri, dns_values)
-    interpolated = interpolator(sim_x, sim_y)
-    return np.asarray(np.ma.filled(interpolated, np.nan), dtype=float)
+    Use inverse-distance weighting over a KD-tree. This is robust to irregular
+    point clouds, duplicate coordinates, and large DNS sets without requiring a
+    Delaunay triangulation.
+    """
+
+    dns_points = np.column_stack((dns_x, dns_y))
+    unique_points, inverse = np.unique(dns_points, axis=0, return_inverse=True)
+
+    if len(unique_points) != len(dns_points):
+        summed = np.zeros(len(unique_points), dtype=float)
+        counts = np.zeros(len(unique_points), dtype=float)
+        np.add.at(summed, inverse, dns_values)
+        np.add.at(counts, inverse, 1.0)
+        dns_values = summed / counts
+    else:
+        dns_values = np.asarray(dns_values, dtype=float)
+
+    sim_points = np.column_stack((sim_x, sim_y))
+    tree = cKDTree(unique_points)
+
+    k = min(8, len(unique_points))
+    distances, indices = tree.query(sim_points, k=k)
+
+    if k == 1:
+        return np.asarray(dns_values[indices], dtype=float)
+
+    distances = np.asarray(distances, dtype=float)
+    indices = np.asarray(indices, dtype=int)
+
+    result = np.empty(len(sim_points), dtype=float)
+    exact_match = np.any(distances == 0.0, axis=1)
+    if np.any(exact_match):
+        result[exact_match] = dns_values[indices[exact_match, np.argmin(distances[exact_match], axis=1)]]
+
+    need_interp = ~exact_match
+    if np.any(need_interp):
+        d = distances[need_interp]
+        idx = indices[need_interp]
+        weights = 1.0 / np.maximum(d, 1e-12) ** 2
+        weights /= weights.sum(axis=1, keepdims=True)
+        result[need_interp] = np.sum(weights * dns_values[idx], axis=1)
+
+    return result
 
 
 def _plot_comparison(

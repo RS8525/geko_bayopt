@@ -1,5 +1,5 @@
 {
-    "experiment_id": "ffs_csep_v3",
+    "experiment_id": "ffs_csep_v3_density_validation",
     "case": {
         "kind": "ffs",
         "options": {
@@ -40,10 +40,10 @@
     },
     "optimizer": {
         "kind": "skopt_gp",
-        "n_initial": 6,
-        "n_iterations": 20,
-        "random_state": 23
-    }, 
+        "n_initial": 5,
+        "n_iterations": 5,
+        "random_state": 2305
+    },
     "mesh": {
         "length_unit": "mm",
         "cad_route": "DSCO",
@@ -66,5 +66,5 @@
         "omega": 1.0e-5
     },
     "session_strategy": "live",
-    "keep_only_best_case_files": true
+    "keep_only_best_case_files": false
 }

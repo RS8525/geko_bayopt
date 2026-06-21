@@ -89,6 +89,8 @@ Do not invent ad-hoc dict shapes for passing simulation results between modules.
 
 The flow case is responsible for declaring `hill_height` and the case's derived `u_bulk` (computed from Re_h). If you change reference conventions, do it there — never in the loss function.
 
+For unstructured FFS LES/RANS comparisons, prefer `objective.options.evaluation_mode = "common_grid"` with `common_grid_floor = "ffs_step"` so DNS and simulation are evaluated on the same physical grid. If evaluating directly on DNS points, `area_weight_mode` should be `"density"` rather than the periodic-hill structured-grid formula.
+
 ---
 
 ## File layout convention
