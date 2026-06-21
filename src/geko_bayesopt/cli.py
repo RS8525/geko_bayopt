@@ -30,9 +30,9 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     print(f"  Case: {cfg.case.kind}")
     print(f"  Parameters: {[p.name for p in cfg.parameters]}")
     print(f"  Objective: {cfg.objective.kind}")
-    print(f"  Optimizer: {cfg.optimizer.kind} "
-          f"(n_initial={cfg.optimizer.n_initial}, "
-          f"n_iterations={cfg.optimizer.n_iterations})")
+    print(f"  Optimizer: {cfg.optimizer.kind}")
+    print(f"  Stopping criteria: {cfg.optimizer.stopping_criteria}")
+    print(f"  Optimizer options: {cfg.optimizer.kind_specific_options}")
     print(f"  Session: {cfg.session_strategy}")
     return 0
 

@@ -1,5 +1,5 @@
 {
-    "experiment_id": "ffs_csep_v2",
+    "experiment_id": "ffs_csep_v3_density_validation",
     "case": {
         "kind": "ffs",
         "options": {
@@ -10,7 +10,7 @@
             "turb_intensity": 3.25,
             "re_h": 6000,
             "turb_viscosity_ratio": 12.0,
-            "iter_count": 200,
+            "iter_count": 1000,
             "zone_inlet": "inlet",
             "zone_outlet": "outlet",
             "outlet_static_pressure": 0.0,
@@ -26,39 +26,44 @@
     "objective": {
         "kind": "gedcp",
         "options": {
-            "field_names": ["cp", "Ux", "Uy", "cturb"],
+            "field_names": ["cp", "Ux", "Uy"],
             "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
             "lambda_field": 1.0,
             "lambda_integral": 0.0,
             "lambda_preference": 0.5,
-            "mask_hill": false
+            "mask_hill": false,
+            "area_weight_mode": "density",
+            "evaluation_mode": "common_grid",
+            "common_grid_nx": 360,
+            "common_grid_ny": 120,
+            "common_grid_floor": "ffs_step"
         }
     },
     "optimizer": {
         "kind": "skopt_gp",
         "stopping_criteria": {
-            "n_calls": 26,
+            "n_calls": 10,
             "epsilon": 1.0e-4,
             "window": 3
         },
         "kind_specific_options": {
-            "n_initial": 6,
-            "random_state": 23
+            "n_initial": 5,
+            "random_state": 2305
         }
-    }, 
+    },
     "mesh": {
         "length_unit": "mm",
         "cad_route": "DSCO",
         "cad_extension": "dsco",
         "min_size": 0.05,
-        "max_size": 0.1,
+        "max_size": 0.25,
         "growth_rate": 1.12,
         "curvature_normal_angle": 8,
         "bl_first_layer_height": 0.002,
-        "bl_number_of_layers": 20,
+        "bl_number_of_layers": 30,
         "bl_growth_rate": 1.2,
         "generate_quads": true,
-        "comment": "Mesh is a bit too fine roughly 500k cells"
+        "comment": ""
     },
     "residual_criteria": {
         "continuity": 1.0e-5,
@@ -68,5 +73,5 @@
         "omega": 1.0e-5
     },
     "session_strategy": "live",
-    "keep_only_best_case_files": true
+    "keep_only_best_case_files": false
 }

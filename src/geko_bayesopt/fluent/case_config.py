@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 @dataclass
 class CaseConfig:
-    """All physics/solver parameters for one periodic-hill simulation.
+    """All physics/solver parameters for one periodic-hill/forward-facing-step simulation.
 
     Designed to be created once and used for both meshing (only the
     `geometry_basename` is needed there) and solving. Use ``dataclasses.replace``
@@ -20,7 +20,6 @@ class CaseConfig:
         from dataclasses import replace
         case_csep15 = replace(base, geko_csep=1.5)
     """
-
     # ---- Identity / files ---------------------------------------------------
     # Name override for new cases to avoid periodic hill naming
     base_case_name: str | None = None
@@ -36,6 +35,14 @@ class CaseConfig:
     fluid_density: float = 1.0       # [kg/m^3]
     fluid_viscosity: float = 1.0e-5  # [kg/(m s)]
 
+    # ---- Forward facing step parameters (ignored for periodic hill) ----------------
+    inlet_velocity: float | None = None
+    turb_intensity: float | None = None
+    turb_viscosity_ratio: float | None = None
+    outlet_static_pressure: float = 0.0
+    step_height: float | None = None
+
+
     # ---- Reynolds number (Re_h = rho * U_b * H / mu) ------------------------
     re_h: int = 5600
 
@@ -47,11 +54,6 @@ class CaseConfig:
     geko_cjet: float | None = None
     geko_ccorner: float | None = None
     geko_cturb: float | None = None
-
-    # ---- FFS Specific Inlet Conditions --------------------------------------
-    inlet_velocity: float | None = None
-    turb_intensity: float | None = None
-    turb_viscosity_ratio: float | None = None
 
     # ---- Solver controls ----------------------------------------------------
     iter_count: int = 2000
@@ -91,13 +93,20 @@ class CaseConfig:
         no GEKO overrides produces a short ID. Coefficient values are rounded
         to 4 decimal places to prevent Windows MAX_PATH (260 chars) errors
         when all four coefficients appear in the filename with full precision.
+        no GEKO overrides produces a short ID.
         """
+        parts = []
+        if self.base_case_name:
+            parts.append(self.base_case_name)
+        else:
+            parts.extend([f"alpha{self.alpha}", f"Re{self.re_h}"])
+            
+
         def fmt(v: float) -> str:
             # 4 d.p. is sufficient to uniquely identify BO proposals while
             # keeping each token to at most ~10 characters.
             return f"{v:.4f}".rstrip("0").rstrip(".")
  
-        parts = [f"alpha{self.alpha}", f"Re{self.re_h}"]
         if self.geko_csep is not None:
             parts.append(f"Csep{fmt(self.geko_csep)}")
         if self.geko_cnw is not None:
