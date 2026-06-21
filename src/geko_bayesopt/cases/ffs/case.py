@@ -98,15 +98,32 @@ class ForwardFacingStepCase(FlowCase):
         # Gauge pressure = 0, with backflow turbulence definitions
         solver.execute_tui(
             f"/define/boundary-conditions/pressure-outlet {cc.zone_outlet} "
-            f"yes " # Specify gauge pressure?
-            f"no "  # profile?
-            f"0.0 " # gauge pressure [Pa]
-            f"yes " # specify turbulence backflow?
-            f"intensity-and-viscosity-ratio "
-            f"{cc.turb_intensity} "
-            f"{cc.turb_viscosity_ratio} "
-            f"yes yes " # default confirmations depending on Fluent version specifics
+            f"yes "  #Backflow Reference Frame: Absolute
+            f"no "   #Use Profile for Gauge Pressure?
+            f"0 "    #Gauge Pressure (in Pa)
+            f"yes "  #Backflow Direction Specification Method: Direction Vector
+            f"yes "  #Coordinate System: Cartesian (X, Y, Z)
+            f"yes "  #Use Profile for X-Component of Flow Direction?
+            f"no "   #Use UDF Profile for X-Component of Flow Direction?
+            f"yes "  #Use Profile for Y-Component of Flow Direction?
+            f"no "   #Use UDF Profile for Y-Component of Flow Direction?
+            f"yes "  #Turbulence Specification Method: K and Omega
+            f"yes "  #Use Profile for Backflow Turbulent Kinetic Energy?
+            f"no "   #Use UDF Profile for Backflow Turbulent Kinetic Energy?
+            f"yes "  #Use Profile for Backflow Specific Dissipation Rate?
+            f"no "   #Use UDF Profile for Backflow Specific Dissipation Rate?
+            f"yes "  #Backflow Pressure Specification: Total Pressure
+            f"no "   #Backflow Pressure Specification: Static Pressure
+            f"yes "  #Average Pressure Specification?
+            f"yes "  #Specify targeted mass flow rate
+            f"yes "  #Use Profile for Targeted mass flow?
+            f"no "   #Use UDF Profile for Targeted mass flow?
+            f"yes "  #Use Profile for Upper Limit of Absolute Pressure Value?
+            f"no "   #Use UDF Profile for Upper Limit of Absolute Pressure Value?
+            f"yes "  #Use Profile for Lower Limit of Absolute Pressure Value?
+            f"no "   #Use UDF Profile for Lower Limit of Absolute Pressure Value?
         )
+
 
     def load_dns(self, dns_path: str | Path) -> tuple[np.ndarray, dict[str, np.ndarray]]:
         """Load FFS DNS reference data.
