@@ -152,7 +152,7 @@ def run_geko_trial(
         Output file paths, named per trial_case.case_id.
     """
     valid_keys = {
-        "geko_csep", "geko_cnw", "geko_cmix", "geko_cjet", "geko_ccorner",
+        "geko_csep", "geko_cnw", "geko_cmix", "geko_cjet", "geko_ccorner", "geko_cturb"
     }
     unknown = set(geko_params) - valid_keys
     if unknown:

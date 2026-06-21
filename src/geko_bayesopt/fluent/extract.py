@@ -33,6 +33,8 @@ _FLUENT_COLUMNS = [
     "y-velocity",
     "pressure",
     "turb-kinetic-energy", #k
+    "production-of-k",
+    "turb-diss-rate", #epsilon
 ]
 #     "k",
 #     "omega",
@@ -132,6 +134,10 @@ def parse_fluent_ascii(
     if "viscosity-turb" in df.columns:
         # Turbulent viscosity has units of m^2/s. Non-dim by U_b * H.
         fields["viscosity-turb"] = df["viscosity-turb"].to_numpy() / (u_bulk * hill_height)
+    if "turb-diss-rate" in df.columns:
+        # Turbulent dissipation rate has units of m^2/s^3. Non-dim by U_b^3 / H, so epsilon* = epsilon * H / U_b^3.
+        fields["turb-diss-rate"] = df["turb-diss-rate"].to_numpy() * (hill_height / (u_bulk * u_bulk * u_bulk))
+
 
     return coords, fields
 

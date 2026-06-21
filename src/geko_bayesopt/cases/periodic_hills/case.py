@@ -124,13 +124,14 @@ class PeriodicHillsCase(FlowCase):
         v = data[:, 4]                        # v
         # data[:, 5] is w (spanwise), unused in 2D RANS comparison
         p = data[:, 5]                        # p
-        density = data[:,6]
+        #density = data[:,6]
         cp = p - p[-1]                        # match existing convention
         k = data[:, 10] 
         prod_k = data[:, 7]
-
-        diss= data[:, 8]
-        turb_visc = 0.09*density*k**2/diss
+        #prod_over_diss = data[:, 9]
+        dissipation = data[:, 8]
+        #diss= data[:, 8]
+        #turb_visc = 0.09*density*k**2/diss
 
         fields = {
             "Ux": u,
@@ -139,7 +140,9 @@ class PeriodicHillsCase(FlowCase):
             "cp": cp,
             "turb-kinetic-energy": k,
             "production-of-k": prod_k,
-            "viscosity-turb": turb_visc,
+            #"production-over-dissipation": prod_over_diss,
+            "turb-diss-rate": dissipation,
+            #"viscosity-turb": turb_visc,
         }
         return coords, fields
 

@@ -36,7 +36,6 @@ from geko_bayesopt.experiment import _resolve_paths, _ensure_mesh
 CONFIG_FILE = Path(__file__).parent.parent / "configs" / "periodic_hills_2800.json"
 
 # Two coefficients to sweep: {name: (min, max, n_points)}
-# n_x * n_y ≈ 60 simulations — e.g. 8×8=64
 SWEEP_2D = {
     "geko_csep": (0.7, 2.5, 8),
     "geko_cnw":  (-2.0, 2.0, 8),

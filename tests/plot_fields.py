@@ -63,11 +63,12 @@ def load_dns_data(case_name):
     uy      = data[:, 4]
     k       = data[:, 10]
     prod_k  = data[:, 7]
+    dissipation = data[:, 8]
     diss    = data[:, 8]
     density = data[:, 6]
     #turb_visc = 0.09 * density * k**2 / diss
 
-    return dict(x=x, y=y, ux=ux, uy=uy, k=k, prod_k=prod_k,) #turb_visc=turb_visc)
+    return dict(x=x, y=y, ux=ux, uy=uy, k=k, prod_k=prod_k, dissipation=dissipation) #turb_visc=turb_visc)
 
 
 def load_sim_data(sim_file_path):
@@ -80,9 +81,10 @@ def load_sim_data(sim_file_path):
     uy        = sim_data[:, 7]
     k         = sim_data[:, 5]
     prod_k    = sim_data[:, 4]
+    dissipation = sim_data[:, 3]
     #turb_visc = sim_data[:, 3]
 
-    return dict(x=x, y=y, ux=ux, uy=uy, k=k, prod_k=prod_k)# turb_visc=turb_visc)
+    return dict(x=x, y=y, ux=ux, uy=uy, k=k, prod_k=prod_k, dissipation=dissipation)# turb_visc=turb_visc)
 
 
 def save_field_plot(x, y, values, title, label, filepath, cmap='viridis', vmin=None, vmax=None):
@@ -119,6 +121,7 @@ def plot_dns_and_sim(case_name, sim_file_path, output_dir):
         ("uy",        "Uy",                        "viridis"),
         ("k",         "Turbulent Kinetic Energy (k)", "viridis"),
         ("prod_k",    "Production of k",           "viridis"),
+        ("dissipation", "Dissipation",             "viridis"),
         #("turb_visc", "Turbulent Viscosity",        "viridis"),
     ]
 
@@ -166,7 +169,7 @@ if __name__ == "__main__":
             "results",
             "fluent",
             "periodic_hills_2800_v1",
-            "alpha1.0_Re2800_Csep1.0539614348602349_Cnw2.0_Cmix0.46039441259276553_Cjet0.884168342743064_Cturb1.6647.ascii",
+            "alpha1.0_Re2800_Csep1.0768516308824714_Cmix0.02182374038670365_Cturb2.0663.ascii",
         )
     )
 

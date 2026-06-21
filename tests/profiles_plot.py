@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SIM_PATH = (
     REPO_ROOT
     / "results/fluent/periodic_hills_2800_v1"
-    / "alpha1.0_Re2800_Csep1.0539614348602349_Cnw2.0_Cmix0.46039441259276553_Cjet0.884168342743064_Cturb1.6647.ascii"
+    / "alpha1.0_Re2800_Csep1.0768516308824714_Cmix0.02182374038670365_Cturb2.0663.ascii"
 )
 DNS_PATH = (
     REPO_ROOT
@@ -39,7 +39,7 @@ FIELD_MAP = {
     "Uy": ("y-velocity", "y-velocity"),
     "turb-kinetic-energy": ("k", "turb-kinetic-energy"),
     "production-of-k": ("production", "production-of-k"),
-    "viscosity-turb": ("viscosity-turb", "viscosity-turb"),
+    "dissipation": ("dissipation", "turb-diss-rate"),
 }
 
 X_TOL = 0.1  # tolerance for selecting points near a given x
@@ -75,7 +75,7 @@ def plot_profiles(
         x positions at which to extract profiles.
     fields : list of str
         Physical fields to plot. Each must be a key in FIELD_MAP.
-        Accepted values: 'Ux', 'Uy', 'turb-kinetic-energy', 'production-of-k'.
+        Accepted values: 'Ux', 'Uy', 'turb-kinetic-energy', 'production-of-k', 'dissipation'.
     sim : pd.DataFrame
         Simulation data.
     dns : pd.DataFrame
@@ -146,7 +146,7 @@ def plot_profiles(
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     X_LOCATIONS = [2.0, 4.5, 8.0]
-    FIELDS = ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "viscosity-turb"]
+    FIELDS = ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "dissipation"]
 
     sim, dns = load_data(SIM_PATH, DNS_PATH)
     plot_profiles(X_LOCATIONS, FIELDS, sim, dns)

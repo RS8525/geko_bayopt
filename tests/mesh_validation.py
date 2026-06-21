@@ -1,5 +1,6 @@
 """
 Mesh sensitivity study: DNS error across mesh levels.
+Warning: this test runs multiple Fluent simulations and mesh creation processes, which may crash sometimes
 
 1. Define GEKO params and reference BayOpt error at the top.
 2. Phase 1: generate all meshes.
@@ -309,8 +310,6 @@ def main():
 
     print(f"\nCSV  : {csv_path}")
     print(f"Plot1: {output_dir / 'mesh_sensitivity_error.png'}")
-    print(f"Plot2: {output_dir / 'mesh_sensitivity_relative.png'}")
-
 
 if __name__ == "__main__":
     main()
