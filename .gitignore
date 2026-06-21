@@ -49,6 +49,9 @@ Notes.md
 data/raw/
 data/dns/
 external/
+data/geometry/perhill/*.pmdb
+data/geometry/perhill/*.fmd
+data/geometry/perhill/*.scdocx
 
 #Prelim scripts
 mini_tests.py
