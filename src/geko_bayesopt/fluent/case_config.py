@@ -24,6 +24,9 @@ class CaseConfig:
     base_case_name: str | None = None  # adapt the filenames for non perhill cases, e.g. "ffs" for forward-facing step. If None, use "alpha{alpha}_Re{re_h}".
 
     # ---- Identity / files ---------------------------------------------------
+    # Name override for new cases to avoid periodic hill naming
+    base_case_name: str | None = None
+
     # Hill-shape parameter from the Laizet 2021 database.
     alpha: float = 1.0
 
@@ -53,6 +56,11 @@ class CaseConfig:
     geko_cjet: float | None = None
     geko_ccorner: float | None = None
     geko_cturb: float | None = None
+
+    # ---- FFS Specific Inlet Conditions --------------------------------------
+    inlet_velocity: float | None = None
+    turb_intensity: float | None = None
+    turb_viscosity_ratio: float | None = None
 
     # ---- Solver controls ----------------------------------------------------
     iter_count: int = 2000

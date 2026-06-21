@@ -48,7 +48,7 @@ class ParameterSpec(BaseModel):
 
     The ``name`` must match a field on ``fluent.case_config.CaseConfig``,
     e.g. ``geko_csep``, ``geko_cnw``, ``geko_cmix``, ``geko_cjet``,
-    ``geko_ccorner``, ``geko_cturb``.
+    ``geko_ccorner``.
     """
     name: str
     low: float
@@ -69,7 +69,7 @@ class CaseSection(BaseModel):
     ``kind`` matches an entry in ``cases/__init__.py``'s dispatcher.
     ``options`` is a free-form dict passed to the case's constructor.
     """
-    kind: Literal["periodic_hills", "ffs"]
+    kind: Literal["periodic_hills"]
     options: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -83,7 +83,7 @@ class ObjectiveSection(BaseModel):
         "mse_cp",
         "mse_field",
         "weighted_multi_field",
-        "gedcp",
+        "gedcp"
     ]
     options: dict[str, Any] = Field(default_factory=dict)
 
@@ -106,11 +106,16 @@ class ResidualCriteria(BaseModel):
 
 class OptimizerSection(BaseModel):
     """Selects the optimizer and its general settings."""
-    kind: Literal["skopt_gp", "skopt_rf", "random", "nelder_mead"]
-    n_initial: int = 8
-    n_iterations: int = 32
-    random_state: int | None = 42
-    options: dict[str, Any] = Field(default_factory=dict)
+    kind: Literal["skopt_gp",
+                  "nelder_mead",
+                  "finite_differences",
+                  "hybrid_nm_bayes",
+                  "hybrid_fd_bayes",
+                  ]
+    stopping_criteria: dict[str, Any] = {"n_calls": 32,
+                                         "epsilon": 1e-4,
+                                         "window":  3}
+    kind_specific_options: dict[str, Any] = Field(default_factory=dict)
 
 
 class MeshSection(BaseModel):

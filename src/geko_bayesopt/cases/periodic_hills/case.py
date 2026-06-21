@@ -134,3 +134,25 @@ class PeriodicHillsCase(FlowCase):
             "cp": cp,
         }
         return coords, fields
+
+
+
+
+#use this in case of running Re=2800 case: (not sure how to mergge this):
+        # data = np.genfromtxt(dns_path, dtype=float,skip_header=1)
+        # coords = data[:, 1:3]                  # x, y
+        # u = data[:, 3]                        # u
+        # v = data[:, 4]                        # v
+        # k = data[:, 10] 
+        # prod_k = data[:, 7]
+        # dissipation = data[:, 8]
+
+
+        # fields = {
+        #     "Ux": u,
+        #     "Uy": v,
+        #     "turb-kinetic-energy": k,
+        #     "production-of-k": prod_k,
+        #     "turb-diss-rate": dissipation,
+        # }
+        # return coords, fields

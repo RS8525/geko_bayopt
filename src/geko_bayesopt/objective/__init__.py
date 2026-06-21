@@ -108,11 +108,14 @@ def objective_geko(
             }
         }
     """
+
     field_weights = {
         "Ux": 1.0,
         "Uy": 1.0,
         "cp": 1.0,
-    }
+        "turb-kinetic-energy": 1.0,
+        "production-of-k": 1.0,
+            }
     if field_names is None:
         field_names = ["cp"]
 
