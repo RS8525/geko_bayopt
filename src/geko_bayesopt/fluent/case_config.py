@@ -42,6 +42,7 @@ class CaseConfig:
     inlet_velocity: float | None = None
     turb_intensity: float | None = None
     turb_viscosity_ratio: float | None = None
+    outlet_static_pressure: float = 0.0
     step_height: float | None = None
 
 

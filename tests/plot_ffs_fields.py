@@ -207,6 +207,24 @@ def _plot_comparison(
     if valid_error.size == 0:
         raise ValueError(f"No valid overlap between simulation and DNS for {sim_name} vs {dns_name}.")
 
+    field_values = np.concatenate(
+        (
+            sim_values[np.isfinite(sim_values)],
+            dns_on_sim[np.isfinite(dns_on_sim)],
+        )
+    )
+    if field_values.size == 0:
+        raise ValueError(f"No finite simulation/DNS values for {sim_name} vs {dns_name}.")
+
+    field_vmin = float(np.min(field_values))
+    field_vmax = float(np.max(field_values))
+    if field_vmin == field_vmax:
+        pad = max(abs(field_vmin), 1.0) * 1e-6
+        field_vmin -= pad
+        field_vmax += pad
+    field_levels = np.linspace(field_vmin, field_vmax, FIELD_LEVELS)
+    field_norm = mcolors.Normalize(vmin=field_vmin, vmax=field_vmax)
+
     error_limit = float(np.max(valid_error))
     error_norm = mcolors.TwoSlopeNorm(vcenter=0.0, vmin=-error_limit, vmax=error_limit)
 
@@ -215,8 +233,9 @@ def _plot_comparison(
     sim_plot = axs[0].tricontourf(
         tri,
         np.ma.masked_invalid(sim_values),
-        levels=FIELD_LEVELS,
+        levels=field_levels,
         cmap=SIM_CMAP,
+        norm=field_norm,
     )
     axs[0].set_title(f"Simulation {sim_name}")
     axs[0].set_xlabel("x")
@@ -227,8 +246,9 @@ def _plot_comparison(
     dns_plot = axs[1].tricontourf(
         tri,
         np.ma.masked_invalid(dns_on_sim),
-        levels=FIELD_LEVELS,
+        levels=field_levels,
         cmap=DNS_CMAP,
+        norm=field_norm,
     )
     axs[1].set_title(f"DNS interpolated to sim grid {dns_name}")
     axs[1].set_xlabel("x")

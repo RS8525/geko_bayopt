@@ -13,6 +13,7 @@
             "iter_count": 200,
             "zone_inlet": "inlet",
             "zone_outlet": "outlet",
+            "outlet_static_pressure": 0.0,
             "zone_top": "ceiling",
             "zone_bottom": "step",
             "geometry_path": "data/geometry/ffs/FFS_3_2d_v2.dsco",
@@ -29,7 +30,7 @@
             "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
             "lambda_field": 1.0,
             "lambda_integral": 0.0,
-            "lambda_preference": 0.05,
+            "lambda_preference": 0.5,
             "mask_hill": false
         }
     },

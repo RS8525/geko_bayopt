@@ -181,6 +181,8 @@ These are baked into `fluent/`:
 - Periodic forcing uses `/define/periodic-conditions/massflow-rate-specification?` with raw TUI (the structured paths drift between Fluent versions).
 - Student license allows only one Fluent session at a time. If you see "Connection refused" on launch, check Task Manager for stray `fluent.exe` processes.
 - For the Forward-Facing Step case `"mask_hill": false` is required to avoid a Fluent error about "overlapping periodic interfaces". This is a quirk of the FFS geometry, which has a small ledge at the inlet that collides with the periodic interface. The hill mask (which zeros out the loss contribution from the hill region) is not needed for FFS since the ledge doesn't affect the loss.
+- For the Forward-Facing Step case, the `ceiling` zone must be converted to a `symmetry` boundary after mesh load and before inlet/outlet setup. Named selections can arrive from meshing as wall-type zones.
+- For the Forward-Facing Step case, the outlet is a `pressure-outlet` with static gauge pressure from `case.options.outlet_static_pressure` (default `0.0` Pa). Configure this with PyFluent's structured pressure-outlet settings, not the TUI prompt stream.
 
 ---
 
