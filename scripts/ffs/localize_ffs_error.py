@@ -10,7 +10,7 @@ from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DNS_PATH = ROOT / "data" / "dns" / "ffs" / "FFS_Reh6000_SBES_Node_2D.csv"
 ASCII_PATH = (
     ROOT

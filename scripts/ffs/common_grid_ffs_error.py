@@ -9,7 +9,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 DNS_PATH = ROOT / "data" / "dns" / "ffs" / "FFS_Reh6000_SBES_Node_2D.csv"
 FLUENT_DIR = ROOT / "results" / "fluent" / "ffs_csep_v3_density_validation"
 RUN_IDS = [

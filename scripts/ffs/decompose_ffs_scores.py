@@ -12,7 +12,7 @@ from geko_bayesopt.objective.GEDCP import GEKO_DEFAULTS, coefficient_preference,
 from geko_bayesopt.objective.field_error import FieldErrorCalculator
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "configs" / "ffs_csep_v3_density_validation.json"
 
 

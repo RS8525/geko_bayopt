@@ -41,9 +41,15 @@
     },
     "optimizer": {
         "kind": "skopt_gp",
-        "n_initial": 5,
-        "n_iterations": 5,
-        "random_state": 2305
+        "stopping_criteria": {
+            "n_calls": 10,
+            "epsilon": 1.0e-4,
+            "window": 3
+        },
+        "kind_specific_options": {
+            "n_initial": 5,
+            "random_state": 2305
+        }
     },
     "mesh": {
         "length_unit": "mm",

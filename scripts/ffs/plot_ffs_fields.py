@@ -1,13 +1,13 @@
 """Config-driven plotting helper for forward-facing-step DNS and simulation data.
 
 Usage:
-    python tests/plot_ffs_fields.py tests/plots/<config-name>.json
+    python scripts/ffs/plot_ffs_fields.py scripts/ffs/plots/<config-name>.json
 
 Configuration is stored outside this script. Each config file defines:
 - the relative input paths for the simulation and DNS data
 - which columns to plot in each dataset
 - which simulation/DNS field pairs to compare
-- the output folder name, which is used under ``tests/plots/<name>/``
+- the output folder name, which is used under ``scripts/ffs/plots/<name>/``
 
 For comparison plots, DNS values are interpolated onto the simulation grid
 before the difference is computed.
@@ -31,7 +31,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 # To use the working, copy default and rename to working, edit as wanted changes will be ignored on the working config by git.
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "plots" / "ffs_working.json"
 
 SIM_CMAP = "viridis"

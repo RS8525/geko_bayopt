@@ -69,7 +69,7 @@ class CaseSection(BaseModel):
     ``kind`` matches an entry in ``cases/__init__.py``'s dispatcher.
     ``options`` is a free-form dict passed to the case's constructor.
     """
-    kind: Literal["periodic_hills"]
+    kind: Literal["periodic_hills", "ffs"]
     options: dict[str, Any] = Field(default_factory=dict)
 
 

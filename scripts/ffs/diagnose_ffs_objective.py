@@ -17,7 +17,7 @@ from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / "configs" / "ffs_csep_v3.json"
 ASCII_PATH = ROOT / "results" / "fluent" / "ffs_csep_v3" / "alpha1.0_Re6000_Csep0.9421.ascii"
 

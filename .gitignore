@@ -62,6 +62,9 @@ error_calcs.py
 results/
 data/dns/ffs/*.csv
 
-# FFS plot configs
+# FFS plot configs and generated plots
+scripts/ffs/plots/*
+!scripts/ffs/plots/ffs_default.json
+
+# Legacy local plot outputs from the previous helper location
 tests/plots/
-!tests/plots/ffs_default.json
