@@ -3,15 +3,11 @@ Optimizer comparison for the periodic hills Re=2800 case.
 
 Usage
 -----
-    python optimizers_test.py            # run all optimizers, then plot
-    python optimizers_test.py --plot     # skip running, only plot
-    python optimizers_test.py --fake     # plot fake histories only (no CFD needed)
-
-Running is fully resumable: if a config's results/metadata.csv already contains
-all n_calls trials, run_experiment() returns immediately and the next optimizer
-starts. Re-run the script at any time to pick up where it left off.
+    python optimizers_test.py            # plot results from metadata.csv files
+    python optimizers_test.py --fake     # overlay fake histories (no CFD needed)
 
 The comparison plot is saved to optimizer_comparison.png in the repo root.
+Missing experiment folders and early-stopped runs are silently skipped.
 """
 
 import argparse
@@ -21,30 +17,61 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
-from geko_bayesopt.experiment import run_experiment
-
 REPO_ROOT = Path(__file__).parent.resolve()
 
-# (config file, experiment_id, display label)
-RUNS = [
-    (REPO_ROOT / "configs/tests/BO.json",    "optimizer_test_bo",    "Bayesian Opt (GP)"),
-    (REPO_ROOT / "configs/tests/NM.json",    "optimizer_test_nm",    "Nelder-Mead"),
-    (REPO_ROOT / "configs/tests/FD.json",    "optimizer_test_fd",    "Finite Differences"),
-    (REPO_ROOT / "configs/tests/NM_BO.json", "optimizer_test_nm_bo", "NM -> Bayesian"),
-    (REPO_ROOT / "configs/tests/FD_BO.json", "optimizer_test_fd_bo", "FD -> Bayesian"),
-]
+# ------------------------------------------------------------------ #
+# Configuration                                                       #
+# ------------------------------------------------------------------ #
+
+dimension = 2   # 1 or 2
+DNS       = False
+
+# Number of initial (non-BO) iterations; a vertical line is drawn after
+# this many iterations to mark where the Bayesian Optimisation phase starts.
+n_initial = 13  # 1D: 9  |  2D: 13
+
+# (experiment_id, display label)
+if dimension == 1 and not DNS:
+    RUNS = [
+        ("optimizer_test_bo",    "Bayesian Opt (GP)"),
+        ("optimizer_test_nm",    "Nelder-Mead"),
+        ("optimizer_test_fd",    "Finite Differences"),
+        ("optimizer_test_nm_bo", "NM -> Bayesian"),
+        ("optimizer_test_fd_bo", "FD -> Bayesian"),
+    ]
+    _title = "Optimizer Comparison — Periodic Hills Re=2800, 1D (geko_csep)"
+
+elif dimension == 2 and not DNS:
+    RUNS = [
+        ("2D_optimizer_test_bo",    "Bayesian Opt (GP)"),
+        ("2D_optimizer_test_nm",    "Nelder-Mead"),
+        ("2D_optimizer_test_fd",    "Finite Differences"),
+        ("2D_optimizer_test_nm_bo", "NM -> Bayesian"),
+        ("2D_optimizer_test_fd_bo", "FD -> Bayesian"),
+    ]
+    _title = "Optimizer Comparison — Periodic Hills Re=2800, 2D (geko_csep, geko_cnw)"
+
+elif dimension == 1 and DNS:
+    RUNS = [
+        ("DNS_optimizer_test_bo",    "Bayesian Opt (GP)"),
+        ("DNS_optimizer_test_nm",    "Nelder-Mead"),
+        ("DNS_optimizer_test_fd",    "Finite Differences"),
+        ("DNS_optimizer_test_nm_bo", "NM -> Bayesian"),
+        ("DNS_optimizer_test_fd_bo", "FD -> Bayesian"),
+    ]
+    _title = "Optimizer Comparison — Periodic Hills Re=2800, 1D DNS (geko_csep)"
+
+else:  # dimension == 2 and DNS
+    RUNS = [
+        ("DNS_2D_optimizer_test_bo",    "Bayesian Opt (GP)"),
+        ("DNS_2D_optimizer_test_nm",    "Nelder-Mead"),
+        ("DNS_2D_optimizer_test_fd",    "Finite Differences"),
+        ("DNS_2D_optimizer_test_nm_bo", "NM -> Bayesian"),
+        ("DNS_2D_optimizer_test_fd_bo", "FD -> Bayesian"),
+    ]
+    _title = "Optimizer Comparison — Periodic Hills Re=2800, 2D DNS (geko_csep, geko_cnw)"
 
 OUT_PATH = REPO_ROOT / "optimizer_comparison.png"
-
-
-# ------------------------------------------------------------------ #
-# Running                                                            #
-# ------------------------------------------------------------------ #
-
-def run_all() -> None:
-    for config_path, _exp_id, label in RUNS:
-        print(f"\n{'='*60}\nRunning: {label}\n{'='*60}")
-        run_experiment(config_path, repo_root=REPO_ROOT)
 
 
 # ------------------------------------------------------------------ #
@@ -92,7 +119,7 @@ def plot_comparison(include_fake: bool = True) -> None:
 
     # Real optimizer histories
     any_real = False
-    for _cfg, exp_id, label in RUNS:
+    for exp_id, label in RUNS:
         scores = _load_scores(exp_id)
         if scores is None:
             print(f"[plot] No results yet for '{label}' — skipping.")
@@ -112,9 +139,11 @@ def plot_comparison(include_fake: bool = True) -> None:
                 linewidth=1.5, linestyle="--", alpha=0.5, label=label,
             )
 
+    ax.axvline(x=n_initial + 0.5, color="red", linestyle="--", linewidth=1.2,
+               label=f"BO phase start (iter {n_initial + 1})")
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Best cost so far")
-    ax.set_title("Optimizer Comparison — Periodic Hills Re=2800, 1D (geko_csep)")
+    ax.set_title(_title)
     ax.legend(loc="upper right", fontsize=9)
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
@@ -129,20 +158,11 @@ def plot_comparison(include_fake: bool = True) -> None:
 # ------------------------------------------------------------------ #
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run and compare optimizers.")
-    parser.add_argument(
-        "--plot", action="store_true",
-        help="Skip running; only regenerate the comparison plot.",
-    )
+    parser = argparse.ArgumentParser(description="Plot optimizer comparison.")
     parser.add_argument(
         "--fake", action="store_true",
-        help="Plot fake histories only — no CFD results needed.",
+        help="Overlay fake histories — useful when no CFD results are available.",
     )
     args = parser.parse_args()
 
-    if args.fake:
-        plot_comparison(include_fake=True)
-    else:
-        if not args.plot:
-            run_all()
-        plot_comparison(include_fake=True)
+    plot_comparison(include_fake=args.fake)

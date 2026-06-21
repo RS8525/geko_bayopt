@@ -151,13 +151,11 @@ def run_experiment(
     store = ResultStore(results_dir, cfg.parameters)
 
     # ---- Resume from prior runs, if any ----
+    n_calls = cfg.optimizer.stopping_criteria.get("n_calls", 32)
     n_completed = _replay_into_optimizer(optimizer, store, cfg.parameters)
-    n_remaining = cfg.optimizer.n_iterations - n_completed
+    n_remaining = n_calls - n_completed
     if n_remaining <= 0:
-        print(
-            f"[experiment] All {cfg.optimizer.n_iterations} trials already completed. "
-            "Nothing to do."
-        )
+        print(f"[experiment] All {n_calls} trials already completed. Nothing to do.")
         return
 
     # ---- Ensure mesh exists before any solver launches ----
@@ -198,11 +196,14 @@ def _run_live_session(
         ui_mode=ui_mode, flow_case=flow_case, residual_criteria=residual_criteria
     )
     with solver:
-        for i in range(n_completed, cfg.optimizer.n_iterations):
+        for i in range(n_completed, cfg.optimizer.stopping_criteria.get("n_calls", 32)):
             _do_one_trial(
                 i, cfg, flow_case, optimizer, loss_fn, store,
                 fluent_work_dir, solver=solver,
             )
+            if hasattr(optimizer, "should_stop") and optimizer.should_stop():
+                print(f"[experiment] Early stop: epsilon convergence after {i + 1} trials.")
+                break
 
 
 def _run_per_trial(
@@ -210,7 +211,7 @@ def _run_per_trial(
     optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
 ) -> None:
     """Launch + exit Fluent per trial. Safer on Student licenses."""
-    for i in range(n_completed, cfg.optimizer.n_iterations):
+    for i in range(n_completed, cfg.optimizer.stopping_criteria.get("n_calls", 32)):
         solver = PeriodicHillSolver(
             flow_case.case_config, mesh_path, fluent_work_dir,
             ui_mode=ui_mode, flow_case=flow_case, residual_criteria=residual_criteria
@@ -220,6 +221,9 @@ def _run_per_trial(
                 i, cfg, flow_case, optimizer, loss_fn, store,
                 fluent_work_dir, solver=solver,
             )
+        if hasattr(optimizer, "should_stop") and optimizer.should_stop():
+            print(f"[experiment] Early stop: epsilon convergence after {i + 1} trials.")
+            break
 
 
 def _do_one_trial(
@@ -240,12 +244,10 @@ def _do_one_trial(
     t_start = time.time()
 
     # 1. Ask
+    n_calls = cfg.optimizer.stopping_criteria.get("n_calls", 32)
     x = optimizer.ask()
     params = vector_to_params(x, cfg.parameters)
-    print(
-        f"\n[experiment] Trial {iteration + 1}/{cfg.optimizer.n_iterations}: "
-        f"{params}"
-    )
+    print(f"\n[experiment] Trial {iteration + 1}/{n_calls}: {params}")
 
     # 2. Run
     trial_case = flow_case.make_trial_case(params)

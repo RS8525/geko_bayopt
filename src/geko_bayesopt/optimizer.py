@@ -41,33 +41,20 @@ def _should_stop(
     history_y: list[float],
     epsilon: float | None,
     *,
-    use_best_two: bool = False,
+    window: int = 3,
 ) -> bool:
-    """Return True when the epsilon convergence condition is met.
+    """Return True when relative improvement over the last ``window`` steps is below epsilon.
 
-    Parameters
-    ----------
-    history_y : list[float]
-        All observed objective values so far.
-    epsilon : float | None
-        Stop when the relative change in objective falls below this.
-    use_best_two : bool
-        When True (BO mode) compare the two *best* observed values.
-        When False (sequential mode) compare the last two iterates.
+    Compares the best value in the last ``window`` entries against the best
+    value in all preceding entries.  Requires at least ``2 * window`` entries
+    to avoid spurious early stops at the very beginning.
     """
-    if epsilon is not None and len(history_y) >= 2:
-
-        # For BO because it's a non-decreasing sequence
-        if use_best_two:
-            s = sorted(history_y)
-            ref, other = s[0], s[1]
-        else:
-            ref, other = history_y[-2], history_y[-1]
-        denom = max(abs(ref), 1e-10)
-        if abs(other - ref) / denom < epsilon:
-            return True
-
-    return False
+    if epsilon is None or len(history_y) < 2 * window:
+        return False
+    recent_best = min(history_y[-window:])
+    prior_best  = min(history_y[:-window])
+    denom = max(abs(prior_best), 1e-10)
+    return abs(recent_best - prior_best) / denom < epsilon
 
 
 # --------------------------------------------------------------------- #
@@ -88,10 +75,12 @@ class NelderMeadOptimizer:
         self,
         parameters: list[ParameterSpec],
         epsilon: float | None = None,
+        window: int = 3,
         options: dict[str, float] | None = None,
     ):
         self.parameters = parameters
         self.epsilon = epsilon
+        self.window = window
         self.options = options or {}
 
         # α = 0.8 (textbook default 1.0): less aggressive reflection reduces
@@ -123,6 +112,7 @@ class NelderMeadOptimizer:
 
         self._history_x: list[list[float]] = []
         self._history_y: list[float] = []
+        self._iter_best_y: list[float] = []
 
         # Active simplex — None until the startup phase is complete.
         self._simplex_x: list[np.ndarray] | None = None
@@ -190,6 +180,7 @@ class NelderMeadOptimizer:
     def _prepare_reflect(self) -> None:
         """Start a new NM iteration: sort simplex and propose the reflection point."""
         self._sort_simplex()
+        self._iter_best_y.append(self._simplex_y[0])
         self._x0 = self._centroid()
         self._x_r = self._x0 + self._ALPHA * (self._x0 - self._simplex_x[-1])
         self._pending_op = 'reflect'
@@ -316,6 +307,7 @@ class NelderMeadOptimizer:
         return {
             "history_x":     self._history_x,
             "history_y":     self._history_y,
+            "iter_best_y":   self._iter_best_y,
             "simplex_x":     [x.tolist() for x in self._simplex_x] if self._simplex_x is not None else None,
             "simplex_y":     self._simplex_y,
             "pending_op":    self._pending_op,
@@ -332,6 +324,7 @@ class NelderMeadOptimizer:
     def set_state(self, state: dict[str, Any]) -> None:
         self._history_x    = state["history_x"]
         self._history_y    = state["history_y"]
+        self._iter_best_y  = state.get("iter_best_y", [])
         sx = state.get("simplex_x")
         self._simplex_x    = [np.array(x, dtype=float) for x in sx] if sx is not None else None
         self._simplex_y    = state.get("simplex_y")
@@ -351,8 +344,7 @@ class NelderMeadOptimizer:
         self._shrink_idx   = state.get("shrink_idx", 0)
 
     def should_stop(self) -> bool:
-        """Return True when the epsilon convergence condition is met."""
-        return _should_stop(self._history_y, self.epsilon)
+        return _should_stop(self._iter_best_y, self.epsilon, window=self.window)
 
 
 # --------------------------------------------------------------------- #
@@ -373,16 +365,19 @@ class FiniteDifferenceOptimizer:
         *,
         options: dict[str, Any],
         epsilon: float | None = None,
+        window: int = 3,
     ):
         self.parameters = parameters
         self.options = options or {}
         self.epsilon = epsilon
+        self.window = window
 
         self.bounds = np.array([[p.low, p.high] for p in parameters])
         self.n_dim = len(parameters)
 
         self._history_x: list[list[float]] = []
         self._history_y: list[float] = []
+        self._step_history_y: list[float] = []
 
         self._step_size     = float(self.options.get("step_size",     0.05))
         self._learning_rate = float(self.options.get("learning_rate", 0.2))
@@ -439,6 +434,7 @@ class FiniteDifferenceOptimizer:
             best_idx     = int(np.argmin(self._history_y))
             self._base   = np.array(self._history_x[best_idx], dtype=float)
             self._base_y = float(self._history_y[best_idx])
+            self._step_history_y.append(self._base_y)
             self._start_probing()
 
     def _start_probing(self) -> None:
@@ -479,9 +475,10 @@ class FiniteDifferenceOptimizer:
 
     def get_state(self) -> dict[str, Any]:
         return {
-            "history_x":    self._history_x,
-            "history_y":    self._history_y,
-            "pending_x":    self._pending_x.tolist() if self._pending_x is not None else None,
+            "history_x":      self._history_x,
+            "history_y":      self._history_y,
+            "step_history_y": self._step_history_y,
+            "pending_x":      self._pending_x.tolist() if self._pending_x is not None else None,
             "pending_op":   self._pending_op,
             "base":         self._base.tolist() if self._base is not None else None,
             "base_y":       self._base_y,
@@ -491,8 +488,9 @@ class FiniteDifferenceOptimizer:
         }
 
     def set_state(self, state: dict[str, Any]) -> None:
-        self._history_x    = state["history_x"]
-        self._history_y    = state["history_y"]
+        self._history_x      = state["history_x"]
+        self._history_y      = state["history_y"]
+        self._step_history_y = state.get("step_history_y", [])
         px = state.get("pending_x")
         self._pending_x    = np.array(px, dtype=float) if px is not None else None
         self._pending_op   = state.get("pending_op")
@@ -504,7 +502,7 @@ class FiniteDifferenceOptimizer:
         self._probe_y      = state.get("probe_y", [])
 
     def should_stop(self) -> bool:
-        return _should_stop(self._history_y, self.epsilon)
+        return _should_stop(self._step_history_y, self.epsilon, window=self.window)
 
     def test_config(self) -> None:
         if self.n_dim < 1:
@@ -545,9 +543,11 @@ class HybridNelderMeadBayesOptimizer:
         bo_options: dict[str, Any],
         nm_options: dict[str, Any],
         epsilon: float | None = None,
+        window: int = 3,
     ):
         self.nelder_mead_iterations = n_initial
         self.epsilon = epsilon
+        self.window = window
         self._parameters = parameters
 
         # Get BO config
@@ -565,12 +565,13 @@ class HybridNelderMeadBayesOptimizer:
                         n_initial_points = 0,  # warm-start with NM history
                         random_state = self.bo_random_state,
         )
-        # Get NM optimizer 
+        # Get NM optimizer
         self._nm_options = nm_options or {}
         self._nm_optimizer = NelderMeadOptimizer(
                         parameters = self._parameters,
                         options = self._nm_options,
-                        epsilon = None,  # NM phase doesn't use epsilon stopping
+                        epsilon = epsilon,
+                        window = window,
         )
 
         # Change after n_initial iterations
@@ -599,8 +600,9 @@ class HybridNelderMeadBayesOptimizer:
             self._bo_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        use_best_two = self._phase == "bayesian"
-        return _should_stop(self._history_y, self.epsilon, use_best_two=use_best_two)
+        if self._phase == "nelder_mead":
+            return self._nm_optimizer.should_stop()
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     def test_config(self) -> None:
         """Raise ValueError if the configuration is invalid."""
@@ -645,9 +647,11 @@ class HybridFiniteDifferenceBayesOptimizer:
         bo_options: dict[str, Any],
         fd_options: dict[str, Any],
         epsilon: float | None = None,
+        window: int = 3,
     ):
         self.finite_difference_iterations = n_initial
         self.epsilon = epsilon
+        self.window = window
         self._parameters = parameters
 
         # Get BO config
@@ -669,7 +673,8 @@ class HybridFiniteDifferenceBayesOptimizer:
         self._fd_optimizer = FiniteDifferenceOptimizer(
             parameters=self._parameters,
             options=fd_options,
-            epsilon=None,  # FD phase doesn't use epsilon stopping
+            epsilon=epsilon,
+            window=window,
         )
 
         # Change after n_initial iterations
@@ -697,8 +702,9 @@ class HybridFiniteDifferenceBayesOptimizer:
             self._bo_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        use_best_two = self._phase == "bayesian"
-        return _should_stop(self._history_y, self.epsilon, use_best_two=use_best_two)
+        if self._phase == "finite_difference":
+            return self._fd_optimizer.should_stop()
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     def test_config(self) -> None:
         """Raise ValueError if the configuration is invalid."""
@@ -726,6 +732,40 @@ class HybridFiniteDifferenceBayesOptimizer:
 
 
 # --------------------------------------------------------------------- #
+# skopt GP wrapper                                                      #
+# --------------------------------------------------------------------- #
+
+class SkoptGPOptimizer:
+    """Thin wrapper around skopt.Optimizer adding epsilon stopping support.
+
+    The raw skopt object has no should_stop() and no history tracking.
+    This wrapper records every tell() call and delegates ask/tell to skopt.
+    """
+
+    def __init__(self, skopt_opt, *, epsilon: float | None = None, window: int = 3):
+        self._opt = skopt_opt
+        self.epsilon = epsilon
+        self.window = window
+        self._history_y: list[float] = []
+
+    def ask(self) -> list[float]:
+        return self._opt.ask()
+
+    def tell(self, x: list[float], y: float) -> Any:
+        self._history_y.append(float(y))
+        return self._opt.tell(x, y)
+
+    def should_stop(self) -> bool:
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
+
+    def get_state(self) -> dict[str, Any]:
+        return {"history_y": self._history_y}
+
+    def set_state(self, state: dict[str, Any]) -> None:
+        self._history_y = state.get("history_y", [])
+
+
+# --------------------------------------------------------------------- #
 # Builders                                                              #
 # --------------------------------------------------------------------- #
 
@@ -748,9 +788,10 @@ def build_optimizer(
         An object exposing ``ask()`` / ``tell()``.
     """
 
-    kind = optimizer_section.kind
-    opts = optimizer_section.kind_specific_options
-    eps  = optimizer_section.stopping_criteria.get("epsilon")
+    kind   = optimizer_section.kind
+    opts   = optimizer_section.kind_specific_options
+    eps    = optimizer_section.stopping_criteria.get("epsilon")
+    window = int(optimizer_section.stopping_criteria.get("window", 3))
 
     if kind == "skopt_gp":
         from skopt import Optimizer as SkoptOptimizer
@@ -758,18 +799,20 @@ def build_optimizer(
         from skopt.learning import GaussianProcessRegressor
         from skopt.learning.gaussian_process.kernels import Matern
         dimensions = [Real(p.low, p.high, name=p.name) for p in parameters]
-        opt = SkoptOptimizer(
+        skopt_opt = SkoptOptimizer(
             dimensions=dimensions,
             base_estimator=GaussianProcessRegressor(kernel=Matern(nu=2.5), n_restarts_optimizer=10,),
             n_initial_points=opts.get("n_initial", 8),
             initial_point_generator="sobol",
             random_state=opts.get("random_state", 42),
         )
+        opt = SkoptGPOptimizer(skopt_opt, epsilon=eps, window=window)
 
     elif kind == "nelder_mead":
         opt = NelderMeadOptimizer(
             parameters,
             epsilon=eps,
+            window=window,
             options=opts,
         )
 
@@ -777,6 +820,7 @@ def build_optimizer(
         opt = FiniteDifferenceOptimizer(
             parameters,
             epsilon=eps,
+            window=window,
             options=opts,
         )
 
@@ -787,6 +831,7 @@ def build_optimizer(
             bo_options=opts.get("bo_options", {}),
             nm_options=opts.get("nm_options", {}),
             epsilon=eps,
+            window=window,
         )
 
     elif kind == "hybrid_fd_bayes":
@@ -796,6 +841,7 @@ def build_optimizer(
             bo_options=opts.get("bo_options", {}),
             fd_options=opts.get("fd_options", {}),
             epsilon=eps,
+            window=window,
         )
 
     else:

@@ -112,7 +112,8 @@ class OptimizerSection(BaseModel):
                   "hybrid_fd_bayes",
                   ]
     stopping_criteria: dict[str, Any] = {"n_calls": 32,
-                                         "epsilon": 1e-4}
+                                         "epsilon": 1e-4,
+                                         "window":  3}
     kind_specific_options: dict[str, Any] = Field(default_factory=dict)
 
 
