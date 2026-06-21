@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.interpolate import griddata
+from scipy.spatial import cKDTree
 
 
 # --------------------------------------------------------------------- #
@@ -123,6 +124,115 @@ def _structured_area_weights(coords: np.ndarray) -> np.ndarray:
     return wx[x_inv] * wy[y_inv]
 
 
+def _is_structured_grid(coords: np.ndarray) -> bool:
+    """Return True when coords look like a full tensor-product grid."""
+
+    x = coords[:, 0]
+    y = coords[:, 1]
+    nx = len(np.unique(x))
+    ny = len(np.unique(y))
+    if nx == 0 or ny == 0:
+        return False
+    return len(coords) == nx * ny
+
+
+def _density_area_weights(coords: np.ndarray, k: int = 8) -> np.ndarray:
+    """Approximate point area for an unstructured 2D cloud.
+
+    The weight is proportional to the square of the local nearest-neighbor
+    radius. This reduces bias from dense LES mesh regions without requiring a
+    Voronoi tessellation over millions of points.
+    """
+
+    tree = cKDTree(coords)
+    distances, _ = tree.query(coords, k=min(k, len(coords)))
+    if distances.ndim == 1:
+        return np.ones(len(coords), dtype=float)
+
+    local_radius = np.mean(distances[:, 1:], axis=1)
+    weights = np.maximum(local_radius, 1e-12) ** 2
+    return weights / np.mean(weights)
+
+
+def _area_weights(coords: np.ndarray, mode: str) -> np.ndarray:
+    """Build comparison weights for structured or unstructured DNS data."""
+
+    if mode == "auto":
+        mode = "structured" if _is_structured_grid(coords) else "density"
+
+    if mode == "structured":
+        return _structured_area_weights(coords)
+    if mode == "density":
+        return _density_area_weights(coords)
+    if mode == "uniform":
+        return np.ones(len(coords), dtype=float)
+
+    raise ValueError(
+        "area_weight_mode must be one of 'auto', 'structured', 'density', or 'uniform'."
+    )
+
+
+def _ffs_step_floor(x: np.ndarray) -> np.ndarray:
+    """Piecewise FFS floor used only when explicitly selected by config."""
+
+    return np.where(x < 0.0, -0.01, 0.0)
+
+
+def _idw_interpolate(
+    source_coords: np.ndarray,
+    source_values: np.ndarray,
+    target_coords: np.ndarray,
+    *,
+    k: int = 8,
+) -> np.ndarray:
+    """Robust scattered-point interpolation using inverse-distance weighting."""
+
+    tree = cKDTree(source_coords)
+    distances, indices = tree.query(target_coords, k=min(k, len(source_coords)))
+
+    if distances.ndim == 1:
+        return np.asarray(source_values[indices], dtype=float)
+
+    distances = np.asarray(distances, dtype=float)
+    indices = np.asarray(indices, dtype=int)
+    out = np.empty(len(target_coords), dtype=float)
+
+    exact = np.any(distances == 0.0, axis=1)
+    if np.any(exact):
+        out[exact] = source_values[indices[exact, np.argmin(distances[exact], axis=1)]]
+
+    need = ~exact
+    if np.any(need):
+        weights = 1.0 / np.maximum(distances[need], 1e-12) ** 2
+        weights /= weights.sum(axis=1, keepdims=True)
+        out[need] = np.sum(weights * source_values[indices[need]], axis=1)
+
+    return out
+
+
+def _common_grid(
+    coords: np.ndarray,
+    *,
+    nx: int,
+    ny: int,
+    floor_mode: str | None,
+) -> np.ndarray:
+    """Build a uniform evaluation grid over the DNS coordinate bounds."""
+
+    x = np.linspace(np.min(coords[:, 0]), np.max(coords[:, 0]), nx)
+    y = np.linspace(np.min(coords[:, 1]), np.max(coords[:, 1]), ny)
+    xx, yy = np.meshgrid(x, y)
+    grid = np.column_stack((xx.ravel(), yy.ravel()))
+
+    if floor_mode in (None, "none"):
+        return grid
+    if floor_mode == "ffs_step":
+        keep = grid[:, 1] >= (_ffs_step_floor(grid[:, 0]) - 1e-12)
+        return grid[keep]
+
+    raise ValueError("common_grid_floor must be one of None, 'none', or 'ffs_step'.")
+
+
 def _wmean(vals: np.ndarray, w: np.ndarray) -> float:
     return float(np.sum(vals * w) / np.sum(w))
 
@@ -158,14 +268,20 @@ class FieldErrorCalculator:
         field_weights: dict[str, float] | None = None,
         mask_hill: bool = False,
         domain_length: float = 9.0,
+        area_weight_mode: str = "auto",
+        evaluation_mode: str = "dns_points",
+        common_grid_nx: int = 360,
+        common_grid_ny: int = 120,
+        common_grid_floor: str | None = None,
     ):
         self.dns_coords = dns_coords
         self.dns_fields = dns_fields
         self.field_weights = field_weights or {}
         self.domain_length = domain_length
 
-        # Area weights on the full DNS grid.
-        w = _structured_area_weights(dns_coords)
+        if evaluation_mode not in {"dns_points", "common_grid"}:
+            raise ValueError("evaluation_mode must be 'dns_points' or 'common_grid'.")
+        self.evaluation_mode = evaluation_mode
 
         # Geometric mask: keep points at or above the hill surface.
         if mask_hill:
@@ -176,8 +292,20 @@ class FieldErrorCalculator:
             keep = np.ones(len(dns_coords), dtype=bool)
 
         self._mask = keep
-        self._weights = w[keep]
-        self._masked_coords = dns_coords[keep]
+
+        if evaluation_mode == "common_grid":
+            self._masked_coords = _common_grid(
+                dns_coords[keep],
+                nx=common_grid_nx,
+                ny=common_grid_ny,
+                floor_mode=common_grid_floor,
+            )
+            self._weights = np.ones(len(self._masked_coords), dtype=float)
+        else:
+            # Area weights on the full DNS grid/cloud.
+            w = _area_weights(dns_coords, area_weight_mode)
+            self._weights = w[keep]
+            self._masked_coords = dns_coords[keep]
 
         # Pre-compute area-weighted std per DNS field on the masked grid.
         # For cp, gauge to area-weighted zero mean first so the datum
@@ -186,7 +314,10 @@ class FieldErrorCalculator:
         self._dns_masked: dict[str, np.ndarray] = {}
         self._dns_std: dict[str, float] = {}
         for name, vals in dns_fields.items():
-            v = vals[keep]
+            if evaluation_mode == "common_grid":
+                v = _idw_interpolate(dns_coords[keep], vals[keep], self._masked_coords)
+            else:
+                v = vals[keep]
             if name == "cp":
                 v = v - _wmean(v, self._weights)   # area-weighted re-gauge
             self._dns_masked[name] = v
@@ -208,13 +339,20 @@ class FieldErrorCalculator:
 
         dns_vals = self._dns_masked[field_name]
 
-        # Interpolate the simulation onto the masked DNS points.
-        sim_interp = griddata(
-            sim_coords,
-            sim_fields[field_name],
-            self._masked_coords,
-            method="linear",
-        )
+        # Interpolate the simulation onto the selected evaluation points.
+        if self.evaluation_mode == "common_grid":
+            sim_interp = _idw_interpolate(
+                sim_coords,
+                sim_fields[field_name],
+                self._masked_coords,
+            )
+        else:
+            sim_interp = griddata(
+                sim_coords,
+                sim_fields[field_name],
+                self._masked_coords,
+                method="linear",
+            )
 
         valid = ~np.isnan(sim_interp)
         if not valid.any():

@@ -56,6 +56,11 @@ def objective_geko(
     lambda_preference: float = 0.0,
     defaults: dict[str, float] | None = None,
     mask_hill: bool = True,
+    area_weight_mode: str = "auto",
+    evaluation_mode: str = "dns_points",
+    common_grid_nx: int = 360,
+    common_grid_ny: int = 120,
+    common_grid_floor: str | None = None,
 ) -> LossFn:
     """Build the full GEDCP objective for the BO loop.
 
@@ -103,16 +108,27 @@ def objective_geko(
             }
         }
     """
+
     field_weights = {
         "Ux": 1.0,
         "Uy": 1.0,
         "cp": 1.0,
-    }
+        "turb-kinetic-energy": 1.0,
+        "production-of-k": 1.0,
+            }
     if field_names is None:
         field_names = ["cp"]
 
     field_calc = FieldErrorCalculator(
-        dns_coords, dns_fields, field_weights, mask_hill=mask_hill,
+        dns_coords,
+        dns_fields,
+        field_weights,
+        mask_hill=mask_hill,
+        area_weight_mode=area_weight_mode,
+        evaluation_mode=evaluation_mode,
+        common_grid_nx=common_grid_nx,
+        common_grid_ny=common_grid_ny,
+        common_grid_floor=common_grid_floor,
     )
     pref_defaults = defaults if defaults is not None else GEKO_DEFAULTS
 

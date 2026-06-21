@@ -20,10 +20,10 @@ class CaseConfig:
         from dataclasses import replace
         case_csep15 = replace(base, geko_csep=1.5)
     """
-    #----- Case selection ------------------------------------------------------
-    base_case_name: str | None = None  # adapt the filenames for non perhill cases, e.g. "ffs" for forward-facing step. If None, use "alpha{alpha}_Re{re_h}".
-
     # ---- Identity / files ---------------------------------------------------
+    # Name override for new cases to avoid periodic hill naming
+    base_case_name: str | None = None
+
     # Hill-shape parameter from the Laizet 2021 database.
     alpha: float = 1.0
 
@@ -39,6 +39,7 @@ class CaseConfig:
     inlet_velocity: float | None = None
     turb_intensity: float | None = None
     turb_viscosity_ratio: float | None = None
+    outlet_static_pressure: float = 0.0
     step_height: float | None = None
 
 
@@ -106,7 +107,6 @@ class CaseConfig:
             # keeping each token to at most ~10 characters.
             return f"{v:.4f}".rstrip("0").rstrip(".")
  
-        parts = [f"alpha{self.alpha}", f"Re{self.re_h}"]
         if self.geko_csep is not None:
             parts.append(f"Csep{fmt(self.geko_csep)}")
         if self.geko_cnw is not None:

@@ -47,10 +47,14 @@ class PeriodicHillSolver:
     # (it reads by column name from the header). Keep this list in sync
     # with ``fluent.extract._FLUENT_COLUMNS`` if you add new fields.
     EXPORT_VARIABLES = [
-        "turb-kinetic-energy",
-        "pressure",
+        "x-coordinate",
+        "y-coordinate",
+        "x-velocity",
         "y-velocity",
-        "x-velocity"
+        "pressure",
+        "turb-kinetic-energy", #k
+        "production-of-k",
+        "turb-diss-rate", #epsilon
     ]
     #     "k",
     #     "omega",

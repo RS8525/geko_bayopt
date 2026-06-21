@@ -1,189 +1,147 @@
 """
-Parse Fluent ASCII exports into the package's ``RunResult`` data contract.
+Periodic-hill flow case (Laizet 2021 / Breuer 2009 canonical configuration).
 
-The Fluent ASCII export is whitespace-separated, with one header line and
-one row per node:
-
-    nodenumber     x-coordinate     y-coordinate       x-velocity       y-velocity         pressure
-             1  0.000000000E+00  2.800090000E-02  1.120101077E-03 -6.660770135E-07 -1.127335036E-01
-             ...
-
-Coordinates and velocities are rescaled here to non-dimensional H / U_bulk
-units so the loss function can compare directly against DNS data without
-the experiment loop having to know about unit systems.
+This module defines:
+    - ``PeriodicHillsCase``: the FlowCase implementation
+    - The boundary conditions: streamwise periodic + mass-flow forcing
+    - DNS loading from Laizet's ``mean_files.dat`` format
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-import pandas as pd
 
-from ..types import RunResult
-
-
-# Column names as they appear in Fluent's ASCII header. Keep in sync with
-# ``solver.PeriodicHillSolver.EXPORT_VARIABLES``.
-_FLUENT_COLUMNS = [
-    "nodenumber",
-    "x-coordinate",
-    "y-coordinate",
-    "x-velocity",
-    "y-velocity",
-    "pressure",
-    "turb-kinetic-energy", #k
-    "production-of-k",
-    "turb-diss-rate", #epsilon
-]
-#     "k",
-#     "omega",
-#     "vorticity-mag",
-#     "wall-shear-stress",
-# ]
+from ...fluent.case_config import CaseConfig
+from ..base import FlowCase
 
 
-def parse_fluent_ascii(
-    ascii_path: str | Path,
-    *,
-    hill_height: float,
-    u_bulk: float,
-    fluid_density: float,
-    cp_reference_index: int | None = None,
-) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-    """Load a Fluent ASCII export and rescale to non-dimensional units.
+class PeriodicHillsCase(FlowCase):
+    """2D periodic-hill at Re_h = 5600 (typical) using GEKO turbulence.
 
-    Returns ``(coords, fields)`` matching the DNS loader's convention:
-        coords: (N, 2), columns (x/H, y/H)
-        fields: {"Ux": Ux/U_b, "Uy": Uy/U_b, "p": p/(rho U_b^2), "cp": cp}
-                plus any additional Fluent fields present (k, omega, ...)
-                also non-dimensionalized.
+    Boundary conditions:
+        - inlet + outlet: streamwise periodic interface (auto-detected
+          translation vector)
+        - top wall: no-slip
+        - bottom wall (hill): no-slip
+        - flow driven by a target mass-flow forcing through the periodic
+          pair, with relaxation factor 0.5
 
-    Parameters
-    ----------
-    ascii_path : str or Path
-        Path to the Fluent ASCII export.
-    hill_height : float
-        Reference length H, in the same units as the Fluent export.
-    u_bulk : float
-        Reference velocity U_b, in the same units as the Fluent export.
-    fluid_density : float
-        Fluid density rho, used for non-dimensionalizing pressure.
-    cp_reference_index : int, optional
-        Index of the reference point used to gauge cp. If None (default),
-        uses the same convention as the existing DNS loader (last row).
-        WARNING: this is grid-order dependent. For rigorous DNS comparison,
-        pass an explicit index matching the DNS gauge point.
+    DNS data:
+        Laizet 2021 ``mean_files.dat`` format. Already non-dimensional
+        in H, U_b. Columns: x, y, u, v, w, p.
     """
-    df = pd.read_csv(
-        ascii_path,
-        sep=r"\s+",
-        engine="python",
-        skipinitialspace=True,
-    )
 
-    # Strip whitespace from column names — Fluent's header has extra spaces.
-    df.columns = [c.strip() for c in df.columns]
+    case_id = "periodic_hills"
 
-    # Drop the nodenumber column — it's grid-internal and not useful.
-    if "nodenumber" in df.columns:
-        df = df.drop(columns=["nodenumber"])
+    def build_case_config(self, options: dict[str, Any]) -> CaseConfig:
+        """Construct a CaseConfig from the JSON ``case.options`` block.
 
-    # Non-dimensionalize coordinates: x/H, y/H
-    # x = df["x-coordinate"].to_numpy() / hill_height
-    x = df["x-coordinate"].to_numpy()
-    # y = df["y-coordinate"].to_numpy() / hill_height
-    y = df["y-coordinate"].to_numpy()
-    coords = np.column_stack([x, y])
+        Required keys: hill_height, re_h.
+        Optional: alpha, ly_over_h, fluid_density, fluid_viscosity,
+        iter_count, zone_*.
 
-    # Non-dimensionalize velocity: u/U_b, v/U_b
-    # fields: dict[str, np.ndarray] = {
-    #     "Ux": df["x-velocity"].to_numpy() / u_bulk,
-    #     "Uy": df["y-velocity"].to_numpy() / u_bulk,
-    # }
-    fields: dict[str, np.ndarray] = {
-        "Ux": df["x-velocity"].to_numpy(),
-        "Uy": df["y-velocity"].to_numpy(),
-    }
-    # CHANGE WHEN FINISHED WITH THE TEST CASE
-    # Non-dimensionalize pressure: p/(rho U_b^2)
-    p_dim = df["pressure"].to_numpy()
-    p_scale = fluid_density * u_bulk * u_bulk
-    # fields["p"] = p_dim / p_scale
-    fields["p"] = p_dim
+        Note: ``geometry_basename`` is derived from ``alpha`` and is NOT
+        accepted here (it's a computed property on CaseConfig).
+        """
+        return CaseConfig(
+            alpha=options.get("alpha", 1.0),
+            hill_height=options["hill_height"],
+            ly_over_h=options.get("ly_over_h", 3.036),
+            fluid_density=options.get("fluid_density", 1.0),
+            fluid_viscosity=options.get("fluid_viscosity", 1.0e-5),
+            re_h=options["re_h"],
+            iter_count=options.get("iter_count", 2000),
+            zone_inlet=options.get("zone_inlet", "inlet"),
+            zone_outlet=options.get("zone_outlet", "outlet"),
+            zone_top=options.get("zone_top", "wall"),
+            zone_bottom=options.get("zone_bottom", "wall_lower"),
+        )
 
-    # Pressure coefficient. Reference convention MUST match the DNS
-    # loader so the field error between them is meaningful. Both now use
-    # a mean-zero gauge (cp = p - mean(p)), which is order-independent
-    # and references both fields to their own domain mean -- unlike
-    # ``p - p[-1]``, where DNS and sim have different last points and the
-    # comparison picks up a spurious constant offset.
-    if cp_reference_index is not None:
-        # Explicit override: gauge to a specific point.
-        fields["cp"] = fields["p"] - fields["p"][cp_reference_index]
-    else:
-        fields["cp"] = fields["p"]
+    def apply_boundary_conditions(self, solver) -> None:
+        """Create periodic interface + apply mass-flow forcing.
 
-    # Pressure coefficient. Reference convention should match the DNS
-    # loader so MSE between them is meaningful. The existing DNS loader
-    # uses ``p - p[-1]``; we match that by default but allow override.
-    # ref_idx = cp_reference_index if cp_reference_index is not None else -1
-    # fields["cp"] = fields["p"] - fields["p"][ref_idx]
+        Two TUI calls:
 
-    # Optional fields, also non-dimensionalized where physically meaningful.
-    if "turb-kinetic-energy" in df.columns:
-        # Turbulent kinetic energy has units of m^2/s^2
-        fields["turb-kinetic-energy"] = df["turb-kinetic-energy"].to_numpy() / (u_bulk * u_bulk)
-    if "production-of-k" in df.columns:
-        # Production of k has units of k/time = m^2/s^3
-        fields["production-of-k"] = df["production-of-k"].to_numpy() * (hill_height / (u_bulk * u_bulk * u_bulk))
-    if "turb-diss-rate" in df.columns:
-        # Omega has units of 1/time. Non-dim by H/U_b: omega * H / U_b.
-        fields["diss"] = df["turb-diss-rate"].to_numpy() * (hill_height / u_bulk)
-    if "vorticity-mag" in df.columns:
-        fields["vor"] = df["vorticity-mag"].to_numpy() * (hill_height / u_bulk)
-    if "wall-shear-stress" in df.columns:
-        fields["wall_shear_stress"] = df["wall-shear-stress"].to_numpy() / p_scale
-    if "turb-diss-rate" in df.columns:
-        # Turbulent dissipation rate has units of m^2/s^3
-        fields["turb-diss-rate"] = df["turb-diss-rate"].to_numpy() * (hill_height / (u_bulk * u_bulk * u_bulk))
+        1. ``create-periodic-interface`` converts the inlet/outlet pair
+           into a translational periodic boundary with auto-computed
+           translation vector.
 
-    return coords, fields
+        2. ``massflow-rate-specification`` sets the target mass flow,
+           initial pressure-gradient guess, relaxation factor, and
+           flow direction.
+
+        Uses raw TUI strings rather than the structured API because
+        these command paths have moved between Fluent versions and
+        TUI is the most stable interface.
+        """
+        cc = self.case_config
+
+        solver.execute_tui(
+            "/mesh/modify-zones/create-periodic-interface "
+            "auto "                  # creation method (auto/conformal/non-conformal)
+            f"{cc.case_id} "         # interface name (unique per run)
+            f"{cc.zone_inlet} "
+            f"{cc.zone_outlet} "
+            "no "                    # rotational? no = translational
+            "yes "                   # auto-compute offset
+            "yes "                   # create periodic zones
+        )
+
+        solver.execute_tui(
+            "/define/periodic-conditions/massflow-rate-specification? "
+            f"{cc.target_mass_flow} "  # mass flow rate
+            "1 "                       # initial pressure-gradient guess
+            "0.5 "                     # relaxation factor
+            "1 "                       # flow direction x
+            "0 "                       # flow direction y
+        )
+
+    def load_dns(
+        self, dns_path: str | Path
+    ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+        """Load Laizet ``mean_files.dat`` for this case.
+
+        File format: whitespace-separated, columns (x, y, u, v, w, p).
+        Already in non-dimensional H, U_b units.
+
+        The cp gauge convention here matches the existing utility loader
+        (``cp = p - p[-1]``). This is grid-order dependent and should
+        be revisited for rigorous comparison.
+        """
+        dns_path = Path(dns_path)
+        if not dns_path.is_file():
+            raise FileNotFoundError(
+                f"DNS file not found: {dns_path}\n"
+                "Expected Laizet 2021 'mean_files.dat' format."
+            )
+
+        data = np.genfromtxt(dns_path, dtype=float,skip_header=1)
+        coords = data[:, 1:3]                  # x, y
+        u = data[:, 6]                        # u
+        v = data[:, 7]                        # v
+        # data[:, 5] is w (spanwise), unused in 2D RANS comparison
+        p = data[:, 8]                        # p
+        cp = p - p[-1]                        # match existing convention
+        k = data[:, 5] 
+        prod_k = data[:, 4]
+
+  
+
+        fields = {
+            "Ux": u,
+            "Uy": v,
+            "p": p,
+            "cp": cp,
+            "turb-kinetic-energy": k,
+            "production-of-k": prod_k
+        }
+        return coords, fields
 
 
-def build_run_result(
-    *,
-    run_id: str,
-    parameters: dict[str, float],
-    ascii_path: str | Path,
-    hill_height: float,
-    u_bulk: float,
-    fluid_density: float,
-    cost_seconds: float = 0.0,
-    converged: bool = True,
-    cp_reference_index: int | None = None,
-) -> RunResult:
-    """Convenience wrapper: parse an ASCII file and return a ``RunResult``."""
-    coords, fields = parse_fluent_ascii(
-        ascii_path,
-        hill_height=hill_height,
-        u_bulk=u_bulk,
-        fluid_density=fluid_density,
-        cp_reference_index=cp_reference_index,
-    )
-    return RunResult(
-        run_id=run_id,
-        parameters=parameters,
-        grid_coords=coords,
-        fields=fields,
-        converged=converged,
-        cost_seconds=cost_seconds,
-        ascii_path=Path(ascii_path),
-    )
-
-
-
-#table of fluent units, might be useful for now, delete later
+#FLUENT UNITS
 # quantity                             units                            factor  offset
 # -----------------------------------  -------------------------  ------------  ------
 # acceleration                         m/s^2                                 1        
@@ -326,3 +284,4 @@ def build_run_result(
 # voltage                              V                                     1        
 # wave-length                          Angstrom                              1        
 # youngs-modulus                       N/m^2                                 1        
+

@@ -1,7 +1,7 @@
 ﻿import os
 import numpy as np
 import pytest
-from geko_bayesopt.objective.field_error import FieldErrorCalculator
+from geko_bayesopt.objective.field_error import FieldErrorCalculator, _is_structured_grid
 
 
 
@@ -83,6 +83,75 @@ def test_field_error_identical_data() -> float:
     mse = calc.calculate_error(sim_coords, sim_fields, field_name="cp")
     assert np.isclose(mse, 0.0)
     return mse
+
+
+def test_area_weight_mode_detects_structured_and_unstructured_dns() -> None:
+    structured = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ]
+    )
+    unstructured = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.25, 0.8],
+        ]
+    )
+
+    assert _is_structured_grid(structured)
+    assert not _is_structured_grid(unstructured)
+
+
+def test_field_error_density_weights_identical_data() -> None:
+    dns_coords = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.25, 0.8],
+            [0.9, 1.1],
+        ]
+    )
+    dns_fields = {"Ux": np.array([1.0, 2.0, 1.5, 2.5])}
+
+    calc = FieldErrorCalculator(dns_coords, dns_fields, area_weight_mode="density")
+    err = calc.calculate_error(
+        dns_coords.copy(),
+        {"Ux": dns_fields["Ux"].copy()},
+        field_name="Ux",
+    )
+
+    assert np.isclose(err, 0.0)
+
+
+def test_field_error_common_grid_identical_data() -> None:
+    dns_coords = np.array(
+        [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+        ]
+    )
+    dns_fields = {"Ux": np.array([1.0, 2.0, 1.5, 2.5])}
+
+    calc = FieldErrorCalculator(
+        dns_coords,
+        dns_fields,
+        evaluation_mode="common_grid",
+        common_grid_nx=2,
+        common_grid_ny=2,
+    )
+    err = calc.calculate_error(
+        dns_coords.copy(),
+        {"Ux": dns_fields["Ux"].copy()},
+        field_name="Ux",
+    )
+
+    assert np.isclose(err, 0.0)
 
 def test_field_error_constant_offset() -> float:
     """
