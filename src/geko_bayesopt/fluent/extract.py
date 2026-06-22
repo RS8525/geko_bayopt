@@ -27,8 +27,6 @@ from ..types import RunResult
 # ``solver.PeriodicHillSolver.EXPORT_VARIABLES``.
 _FLUENT_COLUMNS = [
     "nodenumber",
-    "x-coordinate",
-    "y-coordinate",
     "x-velocity",
     "y-velocity",
     "pressure",
