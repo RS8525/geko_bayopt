@@ -48,8 +48,11 @@ Notes.md
 # External/raw datasets
 data/raw/
 data/dns/periodic_hills/
+data/dns/ffs/
 external/
 data/dns/ffs/FFS_Reh6000_SBES_Node
+!data\dns\ffs\average_z_dns_ffs.py
+
 
 #Prelim scripts
 mini_tests.py
@@ -58,3 +61,10 @@ error_calcs.py
 #results
 results/
 data/dns/ffs/*.csv
+
+# FFS plot configs and generated plots
+scripts/ffs/plots/*
+!scripts/ffs/plots/ffs_default.json
+
+# Legacy local plot outputs from the previous helper location
+tests/plots/

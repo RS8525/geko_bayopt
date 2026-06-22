@@ -44,6 +44,7 @@ class ForwardFacingStepCase(FlowCase):
             inlet_velocity=options.get("inlet_velocity", 10.0),
             turb_intensity=options.get("turb_intensity", 3.25),
             turb_viscosity_ratio=options.get("turb_viscosity_ratio", 12.0),
+            outlet_static_pressure=options.get("outlet_static_pressure", 0.0),
             
             iter_count=options.get("iter_count", 2000),
             zone_inlet=options.get("zone_inlet", "inlet"),
@@ -55,6 +56,11 @@ class ForwardFacingStepCase(FlowCase):
     def apply_boundary_conditions(self, solver) -> None:
         """Apply Velocity Inlet and Pressure Outlet BCs."""
         cc = self.case_config
+
+        # Named selections can arrive from meshing as wall zones. Convert
+        # the FFS-specific boundary types before applying numeric BC values.
+        self._set_zone_type(solver, cc.zone_top, "symmetry")
+        self._set_zone_type(solver, cc.zone_outlet, "pressure-outlet")
 
         # 1. Velocity Inlet
         # Set velocity magnitude, turbulent specification method (Intensity and Viscosity Ratio)
@@ -95,18 +101,56 @@ class ForwardFacingStepCase(FlowCase):
 
 
         # 2. Pressure Outlet
-        # Gauge pressure = 0, with backflow turbulence definitions
-        solver.execute_tui(
-            f"/define/boundary-conditions/pressure-outlet {cc.zone_outlet} "
-            f"yes " # Specify gauge pressure?
-            f"no "  # profile?
-            f"0.0 " # gauge pressure [Pa]
-            f"yes " # specify turbulence backflow?
-            f"intensity-and-viscosity-ratio "
-            f"{cc.turb_intensity} "
-            f"{cc.turb_viscosity_ratio} "
-            f"yes yes " # default confirmations depending on Fluent version specifics
+        self._set_pressure_outlet_static_pressure(
+            solver, cc.zone_outlet, cc.outlet_static_pressure
         )
+
+    @staticmethod
+    def _set_zone_type(solver, zone_name: str, zone_type: str) -> None:
+        """Set a boundary zone type through PyFluent with a TUI fallback."""
+
+        try:
+            solver.settings.setup.boundary_conditions.set_zone_type(
+                zone_list=[zone_name],
+                new_type=zone_type,
+            )
+        except Exception:
+            solver.execute_tui(
+                f"/define/boundary-conditions/zone-type {zone_name} {zone_type}"
+            )
+        print(f"[ffs] Boundary '{zone_name}' configured as {zone_type}.")
+
+    @staticmethod
+    def _set_pressure_outlet_static_pressure(
+        solver, zone_name: str, static_pressure: float
+    ) -> None:
+        """Set pressure-outlet gauge pressure and backflow pressure mode.
+
+        The FFS reference uses a static-pressure outlet. Use the structured
+        PyFluent settings tree instead of TUI prompt streams, because the
+        pressure-outlet TUI prompts drift between Fluent releases.
+        """
+
+        try:
+            outlet = solver.settings.setup.boundary_conditions.pressure_outlet[
+                zone_name
+            ]
+            outlet.momentum.pressure_spec = "Gauge Pressure"
+            outlet.momentum.gauge_pressure.option = "value"
+            outlet.momentum.gauge_pressure.value = static_pressure
+            outlet.momentum.backflow_pressure_spec = "Static Pressure"
+            outlet.momentum.backflow_pressure_specification = "Static Pressure"
+        except Exception as exc:
+            raise RuntimeError(
+                "Failed to configure FFS pressure outlet "
+                f"'{zone_name}' with static pressure {static_pressure} Pa "
+                "through PyFluent settings."
+            ) from exc
+        print(
+            f"[ffs] Boundary '{zone_name}' configured as pressure-outlet "
+            f"with static pressure {static_pressure} Pa."
+        )
+
 
     def load_dns(self, dns_path: str | Path) -> tuple[np.ndarray, dict[str, np.ndarray]]:
         """Load FFS DNS reference data.

@@ -1,0 +1,34 @@
+{
+  "name": "ffs_default",
+  "simulation": {
+    "path": "results/fluent/ffs_csep_v3/alpha1.0_Re6000_Csep0.9407.ascii",
+    "x_column": 1,
+    "y_column": 2,
+    "fields": {
+      "Ux": 3,
+      "Uy": 4,
+      "p": 5,
+      "k": 6
+    },
+    "transforms": {
+      "p": {
+        "kind": "subtract_min"
+      }
+    }
+  },
+  "dns": {
+    "path": "data/dns/ffs/FFS_Reh6000_SBES_Node_2D.csv",
+    "x_column": "x-coordinate",
+    "y_column": "y-coordinate",
+    "fields": {
+      "Ux": "mean-x-velocity",
+      "k": "mean-turbulent-kinetic-energy--k-dataset"
+    },
+    "transforms": {}
+  },
+  "plots": {
+    "simulation": ["Ux", "Uy", "p", "k"],
+    "dns": ["Ux", "k"],
+    "comparison": [["Ux", "Ux"], ["k", "k"]]
+  }
+}
