@@ -22,31 +22,30 @@
         {"name": "geko_csep", "low": 0.7, "high": 2.5},
         {"name": "geko_cnw", "low": -2.0, "high": 2.0},
         {"name": "geko_cmix", "low": -0.2, "high": 1.0},
-        {"name": "geko_cjet", "low": 0.0, "high": 1.2},
-        {"name": "geko_cturb", "low": 1.5, "high": 2.0}
+        {"name": "geko_cturb", "low": 1.5, "high": 2.5}
     ],
     "objective": {
     "kind": "gedcp",
     "options": {
-        "field_names": ["cp", "Ux", "Uy"],
+        "field_names": ["cp", "Ux", "Uy", "diss", "vor"],
         "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
         "lambda_field": 1.0,
         "lambda_integral": 0.0,
-        "lambda_preference": 0.0
+        "lambda_preference": 0.0,
+        "mask_hill": true
         }
     },
     "optimizer": {
         "kind": "skopt_gp",
         "n_initial": 8,
-        "n_iterations": 2,
-        "random_state": 22,
-        "mask_hill": true
+        "n_iterations": 80,
+        "random_state": 22
     },
     "mesh": {
         "length_unit": "m",
         "cad_route": "Workbench",
         "min_size": 0.002,
-        "max_size": 0.05,
+        "max_size": 0.015,
         "growth_rate": 1.12,
         "curvature_normal_angle": 8,
         "bl_first_layer_height": 0.0005,

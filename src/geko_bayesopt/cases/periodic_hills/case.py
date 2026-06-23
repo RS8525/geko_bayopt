@@ -120,10 +120,12 @@ class PeriodicHillsCase(FlowCase):
 
         data = np.genfromtxt(dns_path, dtype=float)
         coords = data[:, :2]                  # x, y
-        u = data[:, 2]                        # u
-        v = data[:, 3]                        # v
-        # data[:, 4] is w (spanwise), unused in 2D RANS comparison
-        p = data[:, 5]                        # p
+        # coord_z = data[:, 2]                # z (all zeros, 2D slice)
+        u = data[:, 3]                        # u
+        v = data[:, 4]                        # v
+        # data[:, 5] is w (spanwise), unused in 2D RANS comparison
+        p = data[:, 6]                        # p
+        diss = data[:, 7]                     # turbulent dissipation rate, eps
 
         cp = p                     
 
@@ -132,10 +134,19 @@ class PeriodicHillsCase(FlowCase):
             "Uy": v,
             "p": p,
             "cp": cp,
+            "diss": diss,
+            # Mean-field vorticity |curl(U_bar)|, computed from the DNS MEAN
+            # velocity so it matches Fluent's "vorticity-mag".
+            #
+            # NOTE: we deliberately do NOT use column 8. That column is the
+            # mean of the *instantaneous* vorticity magnitude <|omega|>, a
+            # fluctuation quantity (it tracks sqrt(eps/nu), corr ~0.99, and is
+            # ~9x larger than |curl(U_bar)| in the core). A steady RANS solve
+            # has no resolved fluctuations and cannot reproduce it, so it is
+            # not a valid calibration target. |curl(U_bar)| is.
+            "vor": self._mean_field_vorticity(coords, u, v),
         }
         return coords, fields
-
-
 
 
 #use this in case of running Re=2800 case: (not sure how to mergge this):
@@ -156,3 +167,39 @@ class PeriodicHillsCase(FlowCase):
         #     "turb-diss-rate": dissipation,
         # }
         # return coords, fields
+
+        
+    @staticmethod
+    def _mean_field_vorticity(
+        coords: np.ndarray, u: np.ndarray, v: np.ndarray
+    ) -> np.ndarray:
+        """Vorticity magnitude of the mean field, |dv/dx - du/dy|.
+
+        Matches Fluent's 2D ``vorticity-mag`` (magnitude of the curl of the
+        mean velocity). Computed by finite differences on the structured
+        Cartesian DNS grid, returned in the original row order.
+
+        The below-hill solid region is zero-filled in the DNS, so the
+        gradient stencil is mildly inaccurate in the first fluid row above
+        the hill surface; those near-wall points are dropped by the hill
+        mask (or should be down-weighted) for the comparison.
+        """
+        x, y = coords[:, 0], coords[:, 1]
+        xr, yr = np.round(x, 6), np.round(y, 6)
+        xs, ys = np.unique(xr), np.unique(yr)
+        nx, ny = len(xs), len(ys)
+        if nx * ny != len(x):
+            raise ValueError(
+                "DNS grid is not a structured tensor product; cannot compute "
+                "mean-field vorticity by finite differences."
+            )
+        xi = np.searchsorted(xs, xr)
+        yi = np.searchsorted(ys, yr)
+        U = np.zeros((ny, nx))
+        V = np.zeros((ny, nx))
+        U[yi, xi] = u
+        V[yi, xi] = v
+        dvdx = np.gradient(V, xs, axis=1)
+        dudy = np.gradient(U, ys, axis=0)
+        vort = np.abs(dvdx - dudy)
+        return vort[yi, xi]

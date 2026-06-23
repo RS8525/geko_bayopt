@@ -28,7 +28,8 @@
         "integral_weights": {"mean_pressure": 1.0, "mean_kinetic_energy": 0.5},
         "lambda_field": 1.0,
         "lambda_integral": 0.0,
-        "lambda_preference": 0.05
+        "lambda_preference": 0.05,
+        "mask_hill": true
         }
     },
     "optimizer": {

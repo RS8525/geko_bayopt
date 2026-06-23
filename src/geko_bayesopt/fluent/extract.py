@@ -46,34 +46,45 @@ _FLUENT_COLUMNS = [
 def parse_fluent_ascii(
     ascii_path: str | Path,
     *,
-    hill_height: float,
-    u_bulk: float,
+    length_ref: float,
+    velocity_ref: float,
     fluid_density: float,
     cp_reference_index: int | None = None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """Load a Fluent ASCII export and rescale to non-dimensional units.
 
     Returns ``(coords, fields)`` matching the DNS loader's convention:
-        coords: (N, 2), columns (x/H, y/H)
-        fields: {"Ux": Ux/U_b, "Uy": Uy/U_b, "p": p/(rho U_b^2), "cp": cp}
-                plus any additional Fluent fields present (k, omega, ...)
+        coords: (N, 2), columns (x/L_ref, y/L_ref)
+        fields: {"Ux": Ux/U_ref, "Uy": Uy/U_ref, "p": p/(rho U_ref^2), "cp": cp}
+                plus any additional Fluent fields present (k, diss, ...)
                 also non-dimensionalized.
+
+    The reference scales are supplied by the caller (the flow case), not
+    hardcoded here, because the correct velocity scale is case-dependent:
+    periodic hills uses the Re-derived bulk velocity, whereas a
+    velocity-inlet case (e.g. FFS) uses its inlet velocity. Keeping the
+    convention in the flow case is what makes ``RunResult`` directly
+    comparable to the (already non-dimensional) DNS reference, regardless
+    of what physical units the mesh/CAD happen to be in.
 
     Parameters
     ----------
     ascii_path : str or Path
         Path to the Fluent ASCII export.
-    hill_height : float
-        Reference length H, in the same units as the Fluent export.
-    u_bulk : float
-        Reference velocity U_b, in the same units as the Fluent export.
+    length_ref : float
+        Reference length L_ref (e.g. hill/step height), in the same units
+        as the Fluent export. Coordinates are divided by this.
+    velocity_ref : float
+        Reference velocity U_ref, in the same units as the Fluent export.
+        Velocities are divided by this; pressure by ``rho * U_ref^2``.
     fluid_density : float
         Fluid density rho, used for non-dimensionalizing pressure.
     cp_reference_index : int, optional
-        Index of the reference point used to gauge cp. If None (default),
-        uses the same convention as the existing DNS loader (last row).
-        WARNING: this is grid-order dependent. For rigorous DNS comparison,
-        pass an explicit index matching the DNS gauge point.
+        Index of a reference point used to gauge cp. If None (default),
+        cp is left equal to the non-dimensional pressure; the field-error
+        calculator re-gauges cp to an area-weighted zero mean on both DNS
+        and sim before comparing, so the absolute datum cancels.
+        WARNING: an explicit index is grid-order dependent.
     """
     df = pd.read_csv(
         ascii_path,
@@ -89,64 +100,50 @@ def parse_fluent_ascii(
     if "nodenumber" in df.columns:
         df = df.drop(columns=["nodenumber"])
 
-    # Non-dimensionalize coordinates: x/H, y/H
-    # x = df["x-coordinate"].to_numpy() / hill_height
-    x = df["x-coordinate"].to_numpy()
-    # y = df["y-coordinate"].to_numpy() / hill_height
-    y = df["y-coordinate"].to_numpy()
+    # Non-dimensionalize coordinates: x/L_ref, y/L_ref
+    x = df["x-coordinate"].to_numpy() / length_ref
+    y = df["y-coordinate"].to_numpy() / length_ref
     coords = np.column_stack([x, y])
 
-    # Non-dimensionalize velocity: u/U_b, v/U_b
-    # fields: dict[str, np.ndarray] = {
-    #     "Ux": df["x-velocity"].to_numpy() / u_bulk,
-    #     "Uy": df["y-velocity"].to_numpy() / u_bulk,
-    # }
+    # Non-dimensionalize velocity: u/U_ref, v/U_ref
     fields: dict[str, np.ndarray] = {
-        "Ux": df["x-velocity"].to_numpy(),
-        "Uy": df["y-velocity"].to_numpy(),
+        "Ux": df["x-velocity"].to_numpy() / velocity_ref,
+        "Uy": df["y-velocity"].to_numpy() / velocity_ref,
     }
-    # CHANGE WHEN FINISHED WITH THE TEST CASE
-    # Non-dimensionalize pressure: p/(rho U_b^2)
-    p_dim = df["pressure"].to_numpy()
-    p_scale = fluid_density * u_bulk * u_bulk
-    # fields["p"] = p_dim / p_scale
-    fields["p"] = p_dim
 
-    # Pressure coefficient. Reference convention MUST match the DNS
-    # loader so the field error between them is meaningful. Both now use
-    # a mean-zero gauge (cp = p - mean(p)), which is order-independent
-    # and references both fields to their own domain mean -- unlike
-    # ``p - p[-1]``, where DNS and sim have different last points and the
-    # comparison picks up a spurious constant offset.
+    # Non-dimensionalize pressure: p / (rho U_ref^2)
+    p_scale = fluid_density * velocity_ref * velocity_ref
+    fields["p"] = df["pressure"].to_numpy() / p_scale
+
+    # Pressure coefficient. The field-error calculator re-gauges cp to an
+    # area-weighted zero mean on both DNS and sim before comparing, so the
+    # absolute datum cancels and the comparison is order-independent. By
+    # default cp == non-dimensional p; an explicit reference index gauges
+    # to a specific point instead.
     if cp_reference_index is not None:
-        # Explicit override: gauge to a specific point.
         fields["cp"] = fields["p"] - fields["p"][cp_reference_index]
     else:
         fields["cp"] = fields["p"]
 
-    # Pressure coefficient. Reference convention should match the DNS
-    # loader so MSE between them is meaningful. The existing DNS loader
-    # uses ``p - p[-1]``; we match that by default but allow override.
-    # ref_idx = cp_reference_index if cp_reference_index is not None else -1
-    # fields["cp"] = fields["p"] - fields["p"][ref_idx]
-
     # Optional fields, also non-dimensionalized where physically meaningful.
     if "turb-kinetic-energy" in df.columns:
         # Turbulent kinetic energy has units of m^2/s^2
-        fields["turb-kinetic-energy"] = df["turb-kinetic-energy"].to_numpy() / (u_bulk * u_bulk)
+        fields["turb-kinetic-energy"] = df["turb-kinetic-energy"].to_numpy() / (velocity_ref * velocity_ref)
     if "production-of-k" in df.columns:
         # Production of k has units of k/time = m^2/s^3
-        fields["production-of-k"] = df["production-of-k"].to_numpy() * (hill_height / (u_bulk * u_bulk * u_bulk))
+        fields["production-of-k"] = df["production-of-k"].to_numpy() * (length_ref / (velocity_ref * velocity_ref * velocity_ref))
+    if "k" in df.columns:
+        fields["k"] = df["k"].to_numpy() / (velocity_ref * velocity_ref)
     if "turb-diss-rate" in df.columns:
-        # Omega has units of 1/time. Non-dim by H/U_b: omega * H / U_b.
-        fields["diss"] = df["turb-diss-rate"].to_numpy() * (hill_height / u_bulk)
+        # Specific dissipation has units 1/time. Non-dim by L_ref/U_ref.
+        fields["diss"] = df["turb-diss-rate"].to_numpy() * (length_ref / velocity_ref**3)
     if "vorticity-mag" in df.columns:
-        fields["vor"] = df["vorticity-mag"].to_numpy() * (hill_height / u_bulk)
+        fields["vor"] = df["vorticity-mag"].to_numpy() * (length_ref / velocity_ref)
     if "wall-shear-stress" in df.columns:
         fields["wall_shear_stress"] = df["wall-shear-stress"].to_numpy() / p_scale
     if "turb-diss-rate" in df.columns:
         # Turbulent dissipation rate has units of m^2/s^3
-        fields["turb-diss-rate"] = df["turb-diss-rate"].to_numpy() * (hill_height / (u_bulk * u_bulk * u_bulk))
+        fields["turb-diss-rate"] = df["turb-diss-rate"].to_numpy() * (length_ref / (velocity_ref * velocity_ref * velocity_ref))
 
     return coords, fields
 
@@ -156,8 +153,8 @@ def build_run_result(
     run_id: str,
     parameters: dict[str, float],
     ascii_path: str | Path,
-    hill_height: float,
-    u_bulk: float,
+    length_ref: float,
+    velocity_ref: float,
     fluid_density: float,
     cost_seconds: float = 0.0,
     converged: bool = True,
@@ -166,8 +163,8 @@ def build_run_result(
     """Convenience wrapper: parse an ASCII file and return a ``RunResult``."""
     coords, fields = parse_fluent_ascii(
         ascii_path,
-        hill_height=hill_height,
-        u_bulk=u_bulk,
+        length_ref=length_ref,
+        velocity_ref=velocity_ref,
         fluid_density=fluid_density,
         cp_reference_index=cp_reference_index,
     )

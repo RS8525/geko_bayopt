@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 
 def main():
-    input_file = Path("data/dns/ffs/FFS_Reh6000_SBES_Node")
+    input_file = Path("data/dns/ffs/FFS_Reh6000_SBES_Node_NEW")
     output_file = Path("data/dns/ffs/FFS_Reh6000_SBES_Node_2D.csv")
     
     print(f"Reading {input_file} ... (this might take a minute)")

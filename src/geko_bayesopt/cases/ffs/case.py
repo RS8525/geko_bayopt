@@ -53,6 +53,26 @@ class ForwardFacingStepCase(FlowCase):
             zone_bottom=options.get("zone_bottom", "step"),
         )
 
+    def reference_scales(self) -> tuple[float, float, float]:
+        """FFS is compared in physical (dimensional, SI) units: ``(1, 1, 1)``.
+
+        Unlike periodic hills (whose DNS is non-dimensional), the FFS pipeline
+        is dimensional end to end: ``load_dns`` returns the raw SI DNS, the
+        ``common_grid`` is built from those metre coordinates, and the
+        ``ffs_step`` floor in the field-error module is hardcoded in metres
+        (step at x=0, y=-0.01 m). So the simulation must stay dimensional too.
+        Returning unit scales makes ``extract.py`` leave the Fluent output in
+        SI, keeping sim and DNS in one common (metre / m·s) space.
+
+        This also avoids the base-class ``u_bulk`` (= Re*nu/(rho*L)), which is
+        the wrong velocity scale for a velocity-inlet case and evaluates to
+        ~0.01 (or 0 if ``re_h`` is unset) for the FFS configs.
+
+        The field error normalises each field by its own area-weighted std,
+        so working in dimensional units does not bias the comparison.
+        """
+        return 1.0, 1.0, 1.0
+
     def apply_boundary_conditions(self, solver) -> None:
         """Apply Velocity Inlet and Pressure Outlet BCs."""
         cc = self.case_config
@@ -153,19 +173,25 @@ class ForwardFacingStepCase(FlowCase):
 
 
     def load_dns(self, dns_path: str | Path) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        """Load FFS DNS reference data.
+        """Load FFS DNS reference data (dimensional, SI).
 
-        File format: CSV with header.
-        Columns used: x-coordinate, y-coordinate, mean-x-velocity, mean-y-velocity, mean-pressure.
-        Currently loads dimensional data as-is to match extract.py setup.
+        File format: CSV with header. Columns used:
+        ``x-coordinate``, ``y-coordinate``, ``mean-x-velocity``,
+        ``mean-y-velocity``, ``mean-pressure``.
+
+        Kept in physical SI units (metres, m/s, Pa) to match the dimensional
+        simulation (FFS ``reference_scales`` returns unit scales) and the
+        metre-based ``ffs_step`` common-grid floor. The field-error calculator
+        normalises each field by its own std and re-gauges cp to zero mean, so
+        the absolute units and pressure datum do not bias the comparison.
         """
 
-        
         dns_path = Path(dns_path)
         if not dns_path.is_file():
             raise FileNotFoundError(f"DNS file not found: {dns_path}")
 
         df = pd.read_csv(dns_path)
+        df.columns = [c.strip() for c in df.columns]
 
         x = df["x-coordinate"].to_numpy()
         y = df["y-coordinate"].to_numpy()
@@ -179,7 +205,9 @@ class ForwardFacingStepCase(FlowCase):
             "Ux": u,
             "Uy": v,
             "p": p,
-            "cp": p,  # Aligning with current extract.py behavior
+            # cp == p; the field-error calculator re-gauges cp to an
+            # area-weighted zero mean on both DNS and sim, so the datum cancels.
+            "cp": p,
         }
-        
+
         return coords, fields

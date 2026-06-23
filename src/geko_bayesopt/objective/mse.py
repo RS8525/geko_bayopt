@@ -19,6 +19,8 @@ def mse_field(
     *,
     field: str = "cp",
     weight: float = 1.0,
+    mask_hill: bool = False,
+    domain_length: float = 9.0,
 ) -> LossFn:
     """Build an MSE loss on a single field.
 
@@ -37,7 +39,7 @@ def mse_field(
     LossFn
         Callable ``run_result -> float``.
     """
-    calc = FieldErrorCalculator(dns_coords, dns_fields)
+    calc = FieldErrorCalculator(dns_coords, dns_fields, mask_hill=mask_hill, domain_length=domain_length,)
 
     def loss(run) -> float:
         mse = calc.calculate_error(run.grid_coords, run.fields, field_name=field)
@@ -52,6 +54,11 @@ def mse_cp(
     dns_fields: dict[str, np.ndarray],
     *,
     weight: float = 1.0,
+    mask_hill: bool = False,
+    domain_length: float = 9.0,
 ) -> LossFn:
     """MSE on pressure coefficient. Shorthand for ``mse_field(field='cp')``."""
-    return mse_field(dns_coords, dns_fields, field="cp", weight=weight)
+    return mse_field(
+        dns_coords, dns_fields, field="cp", weight=weight,
+        mask_hill=mask_hill, domain_length=domain_length,
+    )

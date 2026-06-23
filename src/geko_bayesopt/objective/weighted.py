@@ -19,6 +19,8 @@ def weighted_multi_field(
     dns_fields: dict[str, np.ndarray],
     *,
     field_weights: dict[str, float],
+    mask_hill: bool = False,
+    domain_length: float = 9.0,
 ) -> LossFn:
     """Build a weighted sum of per-field MSEs.
 
@@ -59,7 +61,7 @@ def weighted_multi_field(
             f"Available: {sorted(dns_fields.keys())}"
         )
 
-    calc = FieldErrorCalculator(dns_coords, dns_fields)
+    calc = FieldErrorCalculator(dns_coords, dns_fields, mask_hill=mask_hill, domain_length=domain_length,)
 
     def loss(run) -> float:
         total = 0.0

@@ -104,6 +104,28 @@ class FlowCase(ABC):
     # Shared helpers -- subclasses get these for free                    #
     # ------------------------------------------------------------------ #
 
+    def reference_scales(self) -> tuple[float, float, float]:
+        """Return ``(length_ref, velocity_ref, density)`` for non-dim.
+
+        These are the scales used to convert raw (dimensional) Fluent
+        output into the non-dimensional ``RunResult`` the loss compares
+        against DNS. The convention lives here, per-case, because the
+        correct velocity scale differs between flows:
+
+        - Periodic hills: the flow is mass-flow-forced to a target Re, so
+          the bulk velocity is exactly ``case_config.u_bulk`` (the default
+          below). Correct.
+        - Velocity-inlet cases (e.g. forward-facing step): the velocity is
+          set by the inlet BC, NOT by ``Re_h``. ``case_config.u_bulk``
+          would be wrong by orders of magnitude there, so such a case MUST
+          override this method to return its inlet velocity instead.
+
+        Subclasses override only if their reference velocity is not the
+        Re-derived bulk velocity.
+        """
+        cc = self.case_config
+        return cc.hill_height, cc.u_bulk, cc.fluid_density
+
     def build_run_result(
         self,
         *,
@@ -117,13 +139,14 @@ class FlowCase(ABC):
         Uses the case's reference length and bulk velocity for scaling.
         Subclasses can override if they need a different convention.
         """
+        length_ref, velocity_ref, density = self.reference_scales()
         return build_run_result(
             run_id=run_id,
             parameters=parameters,
             ascii_path=ascii_path,
-            hill_height=self.case_config.hill_height,
-            u_bulk=self.case_config.u_bulk,
-            fluid_density=self.case_config.fluid_density,
+            length_ref=length_ref,
+            velocity_ref=velocity_ref,
+            fluid_density=density,
             cost_seconds=cost_seconds,
         )
 

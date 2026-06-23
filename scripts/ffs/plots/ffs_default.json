@@ -1,7 +1,7 @@
 {
   "name": "ffs_default",
   "simulation": {
-    "path": "results/fluent/ffs_csep_v3/alpha1.0_Re6000_Csep0.9407.ascii",
+    "path": "results/fluent/ffs_csep_v3/ffs_Csep1.3493_Cnw0.5668_Cmix0.4319_Cturb1.6425.ascii",
     "x_column": 1,
     "y_column": 2,
     "fields": {
@@ -22,7 +22,7 @@
     "y_column": "y-coordinate",
     "fields": {
       "Ux": "mean-x-velocity",
-      "k": "mean-turbulent-kinetic-energy--k-dataset"
+      "k": "mean-tke_tot-dataset"
     },
     "transforms": {}
   },

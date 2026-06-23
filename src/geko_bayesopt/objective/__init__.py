@@ -50,17 +50,19 @@ def objective_geko(
     dns_fields: dict[str, np.ndarray],
     *,
     field_names: list[str] | None = None,
+    field_weights: dict[str, float] | None = None,
     integral_weights: dict[str, float] | None = None,
     lambda_field: float = 1.0,
     lambda_integral: float = 1.0,
     lambda_preference: float = 0.0,
     defaults: dict[str, float] | None = None,
-    mask_hill: bool = True,
     area_weight_mode: str = "auto",
     evaluation_mode: str = "dns_points",
     common_grid_nx: int = 360,
     common_grid_ny: int = 120,
     common_grid_floor: str | None = None,
+    mask_hill: bool = False,
+    domain_length: float = 9.0,
 ) -> LossFn:
     """Build the full GEDCP objective for the BO loop.
 
@@ -109,21 +111,26 @@ def objective_geko(
         }
     """
 
-    field_weights = {
+    weights = {
         "Ux": 1.0,
         "Uy": 1.0,
         "cp": 1.0,
-        "turb-kinetic-energy": 1.0,
-        "production-of-k": 1.0,
-            }
+        "diss": 1.0,
+        "vor": 1.0,
+    }
+    # Per-field weights from config override the defaults. Use this to
+    # down-weight secondary fields (e.g. diss/vor, which otherwise dominate).
+    if field_weights:
+        weights.update(field_weights)
     if field_names is None:
         field_names = ["cp"]
 
     field_calc = FieldErrorCalculator(
         dns_coords,
         dns_fields,
-        field_weights,
+        weights,
         mask_hill=mask_hill,
+        domain_length=domain_length,
         area_weight_mode=area_weight_mode,
         evaluation_mode=evaluation_mode,
         common_grid_nx=common_grid_nx,

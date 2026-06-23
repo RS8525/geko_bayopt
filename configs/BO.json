@@ -22,7 +22,7 @@
         {"name": "geko_csep", "low": 0.7, "high": 2.5}
     ],
     "objective": {
-        "kind": "mae",
+        "kind": "gedcp",
         "options": {
             "field_names": ["Ux","Uy","turb-kinetic-energy", "production-of-k"],
             "integral_weights": {},
