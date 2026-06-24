@@ -1,7 +1,12 @@
 """Config-driven plotting helper for forward-facing-step DNS and simulation data.
 
-Usage:
+Run from the repository root and pass the plotting config explicitly:
+
     python scripts/ffs/plot_ffs_fields.py scripts/ffs/plots/<config-name>.json
+
+Absolute config paths are also accepted:
+
+    python scripts/ffs/plot_ffs_fields.py C:/path/to/my_ffs_plot.json
 
 Configuration is stored outside this script. Each config file defines:
 - the relative input paths for the simulation and DNS data
@@ -15,8 +20,8 @@ before the difference is computed.
 
 from __future__ import annotations
 
+import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Callable
 
@@ -30,9 +35,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-# To use the working, copy default and rename to working, edit as wanted changes will be ignored on the working config by git.
 BASE_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "plots" / "ffs_working.json"
 
 SIM_CMAP = "viridis"
 DNS_CMAP = "viridis"
@@ -40,12 +43,48 @@ ERROR_CMAP = "coolwarm"
 FIELD_LEVELS = 100
 
 
-def load_ascii(path: Path) -> np.ndarray:
-    return np.genfromtxt(path, skip_header=1)
+def load_ascii(path: Path) -> pd.DataFrame:
+    """Load a Fluent ASCII export while preserving its header names."""
+
+    frame = pd.read_csv(path, sep=r"\s+", engine="python")
+    frame.columns = frame.columns.str.strip()
+    return frame
 
 
 def load_csv(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path)
+    frame = pd.read_csv(path)
+    frame.columns = frame.columns.str.strip()
+    return frame
+
+
+def _column_values(
+    frame: pd.DataFrame,
+    column: str | int,
+    *,
+    dataset_name: str,
+) -> np.ndarray:
+    """Resolve a configured column by header name or legacy numeric index."""
+
+    if isinstance(column, bool):
+        raise TypeError(f"{dataset_name} column selectors cannot be booleans.")
+    if isinstance(column, int):
+        try:
+            return frame.iloc[:, column].to_numpy()
+        except IndexError as exc:
+            raise IndexError(
+                f"{dataset_name} column index {column} is out of range for "
+                f"{len(frame.columns)} columns."
+            ) from exc
+    if not isinstance(column, str):
+        raise TypeError(
+            f"{dataset_name} column selectors must be header strings or integer indices."
+        )
+    if column not in frame.columns:
+        raise KeyError(
+            f"{dataset_name} column {column!r} was not found. "
+            f"Available columns: {frame.columns.tolist()}"
+        )
+    return frame[column].to_numpy()
 
 
 def _ffs_floor(x: np.ndarray) -> np.ndarray:
@@ -297,8 +336,18 @@ def _normalize_transform_spec(spec: dict[str, str]) -> Callable[[np.ndarray], np
     raise ValueError(f"Unsupported transform kind: {kind}")
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "config",
+        type=Path,
+        help="Path to the JSON plotting configuration.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    config_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_CONFIG_PATH
+    config_path = _parse_args().config
     config_path = config_path if config_path.is_absolute() else (Path.cwd() / config_path).resolve()
 
     if not config_path.is_file():
@@ -319,15 +368,23 @@ def main() -> None:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    sim_data = load_ascii(sim_path)
+    sim_df = load_ascii(sim_path)
     dns_df = load_csv(dns_path)
 
-    sim_x = sim_data[:, int(cfg["simulation"]["x_column"])]
-    sim_y = sim_data[:, int(cfg["simulation"]["y_column"])]
-    dns_x = dns_df[cfg["dns"]["x_column"]].to_numpy()
-    dns_y = dns_df[cfg["dns"]["y_column"]].to_numpy()
+    sim_x = _column_values(
+        sim_df,
+        cfg["simulation"]["x_column"],
+        dataset_name="Simulation",
+    )
+    sim_y = _column_values(
+        sim_df,
+        cfg["simulation"]["y_column"],
+        dataset_name="Simulation",
+    )
+    dns_x = _column_values(dns_df, cfg["dns"]["x_column"], dataset_name="DNS")
+    dns_y = _column_values(dns_df, cfg["dns"]["y_column"], dataset_name="DNS")
 
-    sim_field_columns = {name: int(column) for name, column in cfg["simulation"]["fields"].items()}
+    sim_field_columns = cfg["simulation"]["fields"]
     dns_field_columns = {name: column for name, column in cfg["dns"]["fields"].items()}
 
     sim_transforms: dict[str, Callable[[np.ndarray], np.ndarray]] = {}
@@ -340,11 +397,13 @@ def main() -> None:
 
     sim_fields: dict[str, np.ndarray] = {}
     for field_name, column in sim_field_columns.items():
-        sim_fields[field_name] = _apply_transform(sim_data[:, column], sim_transforms, field_name)
+        values = _column_values(sim_df, column, dataset_name="Simulation")
+        sim_fields[field_name] = _apply_transform(values, sim_transforms, field_name)
 
     dns_fields: dict[str, np.ndarray] = {}
     for field_name, column in dns_field_columns.items():
-        dns_fields[field_name] = _apply_transform(dns_df[column].to_numpy(), dns_transforms, field_name)
+        values = _column_values(dns_df, column, dataset_name="DNS")
+        dns_fields[field_name] = _apply_transform(values, dns_transforms, field_name)
 
     for field_name in cfg.get("plots", {}).get("simulation", []):
         output_path = output_dir / f"sim_{field_name}.png"
