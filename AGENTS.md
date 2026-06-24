@@ -199,6 +199,13 @@ These are baked into `fluent/`:
 
 - `scripts/ffs/plot_ffs_fields.py` is a standalone plotting helper for FFS DNS/simulation data.
 - Configuration lives in `scripts/ffs/plots/*.json`, and figures are written to `scripts/ffs/plots/<config-name>/`.
+- Simulation and DNS columns are selected by exported header strings; legacy numeric simulation indices are still accepted.
 - It does not participate in the main `src/geko_bayesopt` config flow.
 - Only `scripts/ffs/plots/ffs_default.json` is tracked; local working configs and generated figures stay ignored.
 - Keep each JSON config in sync with the specific DNS and simulation exports you want to inspect.
+
+## FFS DNS conversion helper
+
+- `data/dns/ffs/average_z_dns_ffs.py` converts all raw `FFS_Reh*_SBES_Node` exports to `*_2D.csv`.
+- It maps the 20 primary spanwise planes to the canonical first-plane mesh and applies trapezoidal averaging.
+- Exact `(x, y)` grouping is invalid for these exports because coordinate noise fragments equivalent mesh points.
