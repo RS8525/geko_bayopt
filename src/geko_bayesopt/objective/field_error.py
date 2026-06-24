@@ -385,3 +385,117 @@ class FieldErrorCalculator:
         normalized = np.sqrt(mse)/ self._dns_std[field_name]
 
         return float(self.field_weights.get(field_name, 1.0) * normalized)
+
+
+# --------------------------------------------------------------------- #
+# FFS / common-grid helper functions                                    #
+# --------------------------------------------------------------------- #
+
+
+def _is_structured_grid(coords: np.ndarray) -> bool:
+    """Return True when coords look like a full tensor-product grid."""
+
+    x = coords[:, 0]
+    y = coords[:, 1]
+    nx = len(np.unique(x))
+    ny = len(np.unique(y))
+    if nx == 0 or ny == 0:
+        return False
+    return len(coords) == nx * ny
+
+
+def _density_area_weights(coords: np.ndarray, k: int = 8) -> np.ndarray:
+    """Approximate point area for an unstructured 2D cloud.
+
+    The weight is proportional to the square of the local nearest-neighbor
+    radius. This reduces bias from dense LES mesh regions without requiring a
+    Voronoi tessellation over millions of points.
+    """
+
+    tree = cKDTree(coords)
+    distances, _ = tree.query(coords, k=min(k, len(coords)))
+    if distances.ndim == 1:
+        return np.ones(len(coords), dtype=float)
+
+    local_radius = np.mean(distances[:, 1:], axis=1)
+    weights = np.maximum(local_radius, 1e-12) ** 2
+    return weights / np.mean(weights)
+
+
+def _area_weights(coords: np.ndarray, mode: str) -> np.ndarray:
+    """Build comparison weights for structured or unstructured DNS data."""
+
+    if mode == "auto":
+        mode = "structured" if _is_structured_grid(coords) else "density"
+
+    if mode == "structured":
+        return _structured_area_weights(coords)
+    if mode == "density":
+        return _density_area_weights(coords)
+    if mode == "uniform":
+        return np.ones(len(coords), dtype=float)
+
+    raise ValueError(
+        "area_weight_mode must be one of 'auto', 'structured', 'density', or 'uniform'."
+    )
+
+
+def _ffs_step_floor(x: np.ndarray) -> np.ndarray:
+    """Piecewise FFS floor used only when explicitly selected by config."""
+
+    return np.where(x < 0.0, -0.01, 0.0)
+
+
+def _idw_interpolate(
+    source_coords: np.ndarray,
+    source_values: np.ndarray,
+    target_coords: np.ndarray,
+    *,
+    k: int = 8,
+) -> np.ndarray:
+    """Robust scattered-point interpolation using inverse-distance weighting."""
+
+    tree = cKDTree(source_coords)
+    distances, indices = tree.query(target_coords, k=min(k, len(source_coords)))
+
+    if distances.ndim == 1:
+        return np.asarray(source_values[indices], dtype=float)
+
+    distances = np.asarray(distances, dtype=float)
+    indices = np.asarray(indices, dtype=int)
+    out = np.empty(len(target_coords), dtype=float)
+
+    exact = np.any(distances == 0.0, axis=1)
+    if np.any(exact):
+        out[exact] = source_values[indices[exact, np.argmin(distances[exact], axis=1)]]
+
+    need = ~exact
+    if np.any(need):
+        weights = 1.0 / np.maximum(distances[need], 1e-12) ** 2
+        weights /= weights.sum(axis=1, keepdims=True)
+        out[need] = np.sum(weights * source_values[indices[need]], axis=1)
+
+    return out
+
+
+def _common_grid(
+    coords: np.ndarray,
+    *,
+    nx: int,
+    ny: int,
+    floor_mode: str | None,
+) -> np.ndarray:
+    """Build a uniform evaluation grid over the DNS coordinate bounds."""
+
+    x = np.linspace(np.min(coords[:, 0]), np.max(coords[:, 0]), nx)
+    y = np.linspace(np.min(coords[:, 1]), np.max(coords[:, 1]), ny)
+    xx, yy = np.meshgrid(x, y)
+    grid = np.column_stack((xx.ravel(), yy.ravel()))
+
+    if floor_mode in (None, "none"):
+        return grid
+    if floor_mode == "ffs_step":
+        keep = grid[:, 1] >= (_ffs_step_floor(grid[:, 0]) - 1e-12)
+        return grid[keep]
+
+    raise ValueError("common_grid_floor must be one of None, 'none', or 'ffs_step'.")
