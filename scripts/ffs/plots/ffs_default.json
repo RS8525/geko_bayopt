@@ -1,14 +1,14 @@
 {
   "name": "ffs_default",
   "simulation": {
-    "path": "results/fluent/ffs_csep_v3/alpha1.0_Re6000_Csep0.9407.ascii",
-    "x_column": 1,
-    "y_column": 2,
+    "path": "results/fluent/ffs_csep_v3/alpha1.0_Re6000_Csep0.9421.ascii",
+    "x_column": "x-coordinate",
+    "y_column": "y-coordinate",
     "fields": {
-      "Ux": 3,
-      "Uy": 4,
-      "p": 5,
-      "k": 6
+      "Ux": "x-velocity",
+      "Uy": "y-velocity",
+      "p": "pressure",
+      "k": "turb-kinetic-energy"
     },
     "transforms": {
       "p": {

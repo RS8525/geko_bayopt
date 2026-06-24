@@ -89,6 +89,8 @@ Do not invent ad-hoc dict shapes for passing simulation results between modules.
 
 The flow case is responsible for declaring `hill_height` and the case's derived `u_bulk` (computed from Re_h). If you change reference conventions, do it there — never in the loss function.
 
+For unstructured FFS LES/RANS comparisons, prefer `objective.options.evaluation_mode = "common_grid"` with `common_grid_floor = "ffs_step"` so DNS and simulation are evaluated on the same physical grid. If evaluating directly on DNS points, `area_weight_mode` should be `"density"` rather than the periodic-hill structured-grid formula.
+
 ---
 
 ## File layout convention
@@ -179,6 +181,8 @@ These are baked into `fluent/`:
 - Periodic forcing uses `/define/periodic-conditions/massflow-rate-specification?` with raw TUI (the structured paths drift between Fluent versions).
 - Student license allows only one Fluent session at a time. If you see "Connection refused" on launch, check Task Manager for stray `fluent.exe` processes.
 - For the Forward-Facing Step case `"mask_hill": false` is required to avoid a Fluent error about "overlapping periodic interfaces". This is a quirk of the FFS geometry, which has a small ledge at the inlet that collides with the periodic interface. The hill mask (which zeros out the loss contribution from the hill region) is not needed for FFS since the ledge doesn't affect the loss.
+- For the Forward-Facing Step case, the `ceiling` zone must be converted to a `symmetry` boundary after mesh load and before inlet/outlet setup. Named selections can arrive from meshing as wall-type zones.
+- For the Forward-Facing Step case, the outlet is a `pressure-outlet` with static gauge pressure from `case.options.outlet_static_pressure` (default `0.0` Pa). Configure this with PyFluent's structured pressure-outlet settings, not the TUI prompt stream.
 
 ---
 
@@ -188,3 +192,20 @@ These are baked into `fluent/`:
 - BoTorch backend (skopt only; add via `optimizer.py::build_optimizer` when needed)
 - Mesh sensitivity studies (mesh is fixed at experiment start)
 - Anything ML beyond skopt (no PyTorch, no JAX)
+
+---
+
+## FFS plotting helper
+
+- `scripts/ffs/plot_ffs_fields.py` is a standalone plotting helper for FFS DNS/simulation data.
+- Configuration lives in `scripts/ffs/plots/*.json`, and figures are written to `scripts/ffs/plots/<config-name>/`.
+- Simulation and DNS columns are selected by exported header strings; legacy numeric simulation indices are still accepted.
+- It does not participate in the main `src/geko_bayesopt` config flow.
+- Only `scripts/ffs/plots/ffs_default.json` is tracked; local working configs and generated figures stay ignored.
+- Keep each JSON config in sync with the specific DNS and simulation exports you want to inspect.
+
+## FFS DNS conversion helper
+
+- `data/dns/ffs/average_z_dns_ffs.py` converts all raw `FFS_Reh*_SBES_Node` exports to `*_2D.csv`.
+- It maps the 20 primary spanwise planes to the canonical first-plane mesh and applies trapezoidal averaging.
+- Exact `(x, y)` grouping is invalid for these exports because coordinate noise fragments equivalent mesh points.
