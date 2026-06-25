@@ -523,6 +523,274 @@ class FiniteDifferenceOptimizer:
 
 
 # --------------------------------------------------------------------- #
+# Particle Swarm Optimizer                                              #
+# --------------------------------------------------------------------- #
+
+class ParticleSwarmOptimizer:
+    """Particle Swarm Optimization with a sequential ask/tell interface.
+
+    The swarm is evaluated one particle at a time.  Each swarm iteration
+    consists of ``n_particles`` ask/tell cycles; once all results are in,
+    personal bests, the global best, and velocities are updated and the
+    inertia weight is decayed.
+
+    Required option:
+        max_iter    : int   – total swarm iterations for the linear inertia
+                              decay schedule (typically n_calls // n_particles).
+
+    Optional options (with defaults):
+        n_particles : int   – swarm size (default 10)
+        w_start     : float – initial inertia weight (default 0.9)
+        w_end       : float – final inertia weight   (default 0.4)
+        c1          : float – cognitive coefficient  (default 1.5)
+        c2          : float – social coefficient     (default 1.5)
+        v_max_frac  : float – v_max as fraction of each dimension's range
+                              (default 0.2)
+        random_state: int   – RNG seed (default 42)
+
+    Boundary handling: absorption — particles that overshoot a bound are
+    placed exactly on it and their velocity in that dimension is zeroed.
+    """
+
+    def __init__(
+        self,
+        parameters: list[ParameterSpec],
+        *,
+        options: dict[str, Any],
+        epsilon: float | None = None,
+        window: int = 3,
+    ):
+        self.parameters = parameters
+        self.epsilon = epsilon
+        self.window = window
+        opts = options or {}
+
+        self.bounds  = np.array([[p.low, p.high] for p in parameters])
+        self.n_dim   = len(parameters)
+
+        self.n_particles = int(opts.get("n_particles", 10))
+        self.w_start     = float(opts.get("w_start",   0.9))
+        self.w_end       = float(opts.get("w_end",     0.4))
+        self.c1          = float(opts.get("c1",        1.5))
+        self.c2          = float(opts.get("c2",        1.5))
+        self.v_max_frac  = float(opts.get("v_max_frac", 0.2))
+        self.max_iter    = int(opts["max_iter"])
+
+        self._rng    = np.random.default_rng(int(opts.get("random_state", 42)))
+        self._v_max  = self.v_max_frac * (self.bounds[:, 1] - self.bounds[:, 0])
+
+        # Full history
+        self._history_x: list[list[float]] = []
+        self._history_y: list[float] = []
+        # One entry per completed swarm iteration, for the stopping criterion.
+        self._gbest_history: list[float] = []
+
+        # Swarm state — None until the init phase completes.
+        self._positions:  np.ndarray | None = None   # (n_particles, n_dim)
+        self._velocities: np.ndarray | None = None   # (n_particles, n_dim)
+        self._pbest_x:    np.ndarray | None = None   # (n_particles, n_dim)
+        self._pbest_y:    np.ndarray | None = None   # (n_particles,)
+        self._gbest_x:    np.ndarray | None = None   # (n_dim,)
+        self._gbest_y:    float = float("inf")
+
+        # State machine
+        self._phase        = "init"
+        self._particle_idx = 0
+        self._swarm_iter   = 0
+
+        # Positions pre-computed for the current swarm iteration.
+        self._pending_positions: list[np.ndarray] = []
+        # Results collected within the current swarm iteration.
+        self._iter_results_x: list[np.ndarray] = []
+        self._iter_results_y: list[float] = []
+
+        # Draw initial particle positions once so ask() is pure.
+        self._init_positions: list[np.ndarray] = self._sample_initial_positions()
+
+    # ------------------------------------------------------------------ #
+    # Initialisation helpers                                              #
+    # ------------------------------------------------------------------ #
+
+    def _sample_initial_positions(self) -> list[np.ndarray]:
+        low, high = self.bounds[:, 0], self.bounds[:, 1]
+        return [self._rng.uniform(low, high) for _ in range(self.n_particles)]
+
+    def _finalize_init(self) -> None:
+        """Transition from init phase to iterate: set up swarm state."""
+        self._positions  = np.array(self._iter_results_x, dtype=float)
+        self._pbest_x    = self._positions.copy()
+        self._pbest_y    = np.array(self._iter_results_y, dtype=float)
+        self._velocities = self._rng.uniform(
+            -self._v_max, self._v_max, (self.n_particles, self.n_dim)
+        )
+        best_idx       = int(np.argmin(self._pbest_y))
+        self._gbest_x  = self._pbest_x[best_idx].copy()
+        self._gbest_y  = float(self._pbest_y[best_idx])
+        self._gbest_history.append(self._gbest_y)
+
+        self._iter_results_x = []
+        self._iter_results_y = []
+        self._particle_idx   = 0
+        self._compute_next_positions()
+        self._phase = "iterate"
+
+    # ------------------------------------------------------------------ #
+    # Velocity / position update                                          #
+    # ------------------------------------------------------------------ #
+
+    def _current_w(self) -> float:
+        t = min(self._swarm_iter, self.max_iter)
+        return float(self.w_start - (self.w_start - self.w_end) * t / self.max_iter)
+
+    def _compute_next_positions(self) -> None:
+        """Pre-compute proposed positions for every particle in the next iteration."""
+        w = self._current_w()
+        self._pending_positions = []
+        for i in range(self.n_particles):
+            r1 = self._rng.uniform(0.0, 1.0, self.n_dim)
+            r2 = self._rng.uniform(0.0, 1.0, self.n_dim)
+
+            v_new = (w * self._velocities[i]
+                     + self.c1 * r1 * (self._pbest_x[i] - self._positions[i])
+                     + self.c2 * r2 * (self._gbest_x    - self._positions[i]))
+            v_new = np.clip(v_new, -self._v_max, self._v_max)
+
+            x_new = self._positions[i] + v_new
+
+            # Absorption: overshoot → pin to bound, zero that velocity component.
+            for d in range(self.n_dim):
+                if x_new[d] < self.bounds[d, 0]:
+                    x_new[d]  = self.bounds[d, 0]
+                    v_new[d]  = 0.0
+                elif x_new[d] > self.bounds[d, 1]:
+                    x_new[d]  = self.bounds[d, 1]
+                    v_new[d]  = 0.0
+
+            self._velocities[i] = v_new
+            self._pending_positions.append(x_new)
+
+    def _finalize_iteration(self) -> None:
+        """Update positions, pbest, gbest after all particles have been evaluated."""
+        for i in range(self.n_particles):
+            self._positions[i] = self._iter_results_x[i]
+            y = self._iter_results_y[i]
+            if y < self._pbest_y[i]:
+                self._pbest_y[i] = y
+                self._pbest_x[i] = self._iter_results_x[i].copy()
+            if y < self._gbest_y:
+                self._gbest_y = y
+                self._gbest_x = self._iter_results_x[i].copy()
+
+        self._gbest_history.append(self._gbest_y)
+        self._swarm_iter   += 1
+        self._iter_results_x = []
+        self._iter_results_y = []
+        self._particle_idx   = 0
+        self._compute_next_positions()
+
+    # ------------------------------------------------------------------ #
+    # ask / tell                                                          #
+    # ------------------------------------------------------------------ #
+
+    def ask(self) -> list[float]:
+        if self._phase == "init":
+            return list(self._init_positions[self._particle_idx])
+        return list(self._pending_positions[self._particle_idx])
+
+    def tell(self, x: list[float], y: float) -> None:
+        self._history_x.append(list(x))
+        self._history_y.append(float(y))
+
+        self._iter_results_x.append(np.array(x, dtype=float))
+        self._iter_results_y.append(float(y))
+        self._particle_idx += 1
+
+        if self._particle_idx >= self.n_particles:
+            if self._phase == "init":
+                self._finalize_init()
+            else:
+                self._finalize_iteration()
+
+    def should_stop(self) -> bool:
+        return _should_stop(self._gbest_history, self.epsilon, window=self.window)
+
+    # ------------------------------------------------------------------ #
+    # Validation                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_config(self) -> None:
+        if self.n_particles < 2:
+            raise ValueError(f"n_particles must be >= 2, got {self.n_particles}.")
+        if self.max_iter < 1:
+            raise ValueError(f"max_iter must be >= 1, got {self.max_iter}.")
+        if not (0 < self.w_end <= self.w_start <= 1):
+            raise ValueError(
+                f"Need 0 < w_end <= w_start <= 1, "
+                f"got w_start={self.w_start}, w_end={self.w_end}."
+            )
+        if self.c1 <= 0 or self.c2 <= 0:
+            raise ValueError(
+                f"c1 and c2 must be > 0, got c1={self.c1}, c2={self.c2}."
+            )
+        if not (0 < self.v_max_frac <= 1):
+            raise ValueError(
+                f"v_max_frac must be in (0, 1], got {self.v_max_frac}."
+            )
+        if self.epsilon is not None and self.epsilon <= 0:
+            raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+
+    # ------------------------------------------------------------------ #
+    # Persistence                                                         #
+    # ------------------------------------------------------------------ #
+
+    def get_state(self) -> dict[str, Any]:
+        return {
+            "phase":            self._phase,
+            "particle_idx":     self._particle_idx,
+            "swarm_iter":       self._swarm_iter,
+            "history_x":        self._history_x,
+            "history_y":        self._history_y,
+            "gbest_history":    self._gbest_history,
+            "positions":        self._positions.tolist()  if self._positions  is not None else None,
+            "velocities":       self._velocities.tolist() if self._velocities is not None else None,
+            "pbest_x":          self._pbest_x.tolist()   if self._pbest_x    is not None else None,
+            "pbest_y":          self._pbest_y.tolist()   if self._pbest_y    is not None else None,
+            "gbest_x":          self._gbest_x.tolist()   if self._gbest_x    is not None else None,
+            "gbest_y":          self._gbest_y,
+            "pending_positions": [p.tolist() for p in self._pending_positions],
+            "iter_results_x":   [x.tolist() for x in self._iter_results_x],
+            "iter_results_y":   self._iter_results_y,
+        }
+
+    def set_state(self, state: dict[str, Any]) -> None:
+        self._phase        = state.get("phase", "init")
+        self._particle_idx = state.get("particle_idx", 0)
+        self._swarm_iter   = state.get("swarm_iter", 0)
+        self._history_x    = state.get("history_x", [])
+        self._history_y    = state.get("history_y", [])
+        self._gbest_history = state.get("gbest_history", [])
+
+        def _arr(key):
+            v = state.get(key)
+            return np.array(v, dtype=float) if v is not None else None
+
+        self._positions  = _arr("positions")
+        self._velocities = _arr("velocities")
+        self._pbest_x    = _arr("pbest_x")
+        self._pbest_y    = _arr("pbest_y")
+        self._gbest_x    = _arr("gbest_x")
+        self._gbest_y    = state.get("gbest_y", float("inf"))
+
+        self._pending_positions = [
+            np.array(p, dtype=float) for p in state.get("pending_positions", [])
+        ]
+        self._iter_results_x = [
+            np.array(x, dtype=float) for x in state.get("iter_results_x", [])
+        ]
+        self._iter_results_y = state.get("iter_results_y", [])
+
+
+# --------------------------------------------------------------------- #
 # Hybrid Nelder-Mead → Bayesian Optimizer                              #
 # --------------------------------------------------------------------- #
 
@@ -732,6 +1000,303 @@ class HybridFiniteDifferenceBayesOptimizer:
 
 
 # --------------------------------------------------------------------- #
+# Hybrid Bayesian → Nelder-Mead Optimizer                              #
+# --------------------------------------------------------------------- #
+
+class HybridBayesNelderMeadOptimizer:
+    """Two-phase optimizer: Bayesian Optimisation (Sobol + GP), then Nelder-Mead.
+
+    The first ``n_initial`` evaluations use a skopt GP with Sobol initial
+    sampling followed by standard GP-based BO.  Once ``n_initial`` results
+    have been collected the optimizer switches to ``NelderMeadOptimizer``
+    whose startup simplex is re-centred on the current BO best point
+    (instead of the GEKO defaults), so the NM phase refines from the best
+    region found by BO.
+
+    Configuration knobs (inside ``bo_options``):
+        n_initial_sobol : int  – Sobol points before GP takes over (default 5).
+        bayesian_kind   : str  – skopt base estimator (default "GP").
+        random_state    : int  – RNG seed (default 42).
+    """
+
+    def __init__(
+        self,
+        parameters: list[ParameterSpec],
+        *,
+        n_initial: int,
+        bo_options: dict[str, Any],
+        nm_options: dict[str, Any],
+        epsilon: float | None = None,
+        window: int = 3,
+    ):
+        self.bo_iterations = n_initial
+        self.epsilon = epsilon
+        self.window = window
+        self._parameters = parameters
+
+        from skopt import Optimizer as SkoptOptimizer
+        from skopt.space import Real
+        bo_opts = bo_options or {}
+        bo_dimensions = [Real(p.low, p.high, name=p.name) for p in self._parameters]
+        n_sobol = int(bo_opts.get("n_initial_sobol", min(5, n_initial)))
+
+        self._bo_optimizer = SkoptOptimizer(
+            dimensions=bo_dimensions,
+            base_estimator=bo_opts.get("bayesian_kind", "GP"),
+            n_initial_points=n_sobol,
+            initial_point_generator="sobol",
+            random_state=bo_opts.get("random_state", 42),
+        )
+
+        self._nm_optimizer = NelderMeadOptimizer(
+            parameters=self._parameters,
+            options=nm_options or {},
+            epsilon=epsilon,
+            window=window,
+        )
+
+        self._phase = "bayesian"
+        self._nm_seeded = False
+
+        self._history_x: list[list[float]] = []
+        self._history_y: list[float] = []
+
+    # ------------------------------------------------------------------ #
+    # Transition helper                                                   #
+    # ------------------------------------------------------------------ #
+
+    def _seed_nm_from_bo_best(self) -> None:
+        """Re-centre NM's initial simplex on the BO best point."""
+        if self._nm_seeded:
+            return
+        best_idx = int(np.argmin(self._history_y))
+        best_x = list(self._history_x[best_idx])
+        self._nm_optimizer._initial_points = self._build_nm_simplex(best_x)
+        self._nm_seeded = True
+
+    def _build_nm_simplex(self, center: list[float]) -> list[list[float]]:
+        """Build an n_dim+1 simplex around *center* using the same perturbation
+        offsets as NelderMeadOptimizer._build_initial_simplex."""
+        n_dim = len(center)
+        bounds = self._nm_optimizer.bounds
+
+        def clip(val: float, dim: int) -> float:
+            return float(np.clip(val, bounds[dim, 0], bounds[dim, 1]))
+
+        if n_dim == 1:
+            return [
+                [clip(center[0] - 0.25, 0)],
+                [clip(center[0] + 0.25, 0)],
+            ]
+        lower = list(center)
+        upper = list(center)
+        lower[0] = clip(center[0] - 0.25, 0)
+        upper[0] = clip(center[0] + 0.25, 0)
+        points = [lower, upper]
+        for dim in range(1, n_dim):
+            pt = list(center)
+            pt[dim] = clip(center[dim] + 0.10, dim)
+            points.append(pt)
+        return points
+
+    # ------------------------------------------------------------------ #
+    # ask / tell                                                          #
+    # ------------------------------------------------------------------ #
+
+    def ask(self) -> list[float]:
+        if len(self._history_y) < self.bo_iterations:
+            self._phase = "bayesian"
+            return self._bo_optimizer.ask()
+
+        self._phase = "nelder_mead"
+        self._seed_nm_from_bo_best()
+        return self._nm_optimizer.ask()
+
+    def tell(self, x: list[float], y: float) -> None:
+        self._history_x.append(list(x))
+        self._history_y.append(float(y))
+
+        if self._phase == "bayesian":
+            self._bo_optimizer.tell(x, y)
+        else:
+            self._nm_optimizer.tell(x, y)
+
+    def should_stop(self) -> bool:
+        if self._phase == "bayesian":
+            return _should_stop(self._history_y, self.epsilon, window=self.window)
+        return self._nm_optimizer.should_stop()
+
+    # ------------------------------------------------------------------ #
+    # Validation                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_config(self) -> None:
+        if self.bo_iterations < 1:
+            raise ValueError(
+                f"n_initial must be >= 1 for the BO phase, got {self.bo_iterations}."
+            )
+        if self.epsilon is not None and self.epsilon <= 0:
+            raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+
+    # ------------------------------------------------------------------ #
+    # Persistence                                                         #
+    # ------------------------------------------------------------------ #
+
+    def get_state(self) -> dict[str, Any]:
+        return {
+            "phase":     self._phase,
+            "nm_seeded": self._nm_seeded,
+            "history_x": self._history_x,
+            "history_y": self._history_y,
+        }
+
+    def set_state(self, state: dict[str, Any]) -> None:
+        self._phase     = state.get("phase", "bayesian")
+        self._nm_seeded = state.get("nm_seeded", False)
+        self._history_x = state.get("history_x", [])
+        self._history_y = state.get("history_y", [])
+
+
+# --------------------------------------------------------------------- #
+# Hybrid Bayesian → Finite-Difference Optimizer                        #
+# --------------------------------------------------------------------- #
+
+class HybridBayesFiniteDifferenceOptimizer:
+    """Two-phase optimizer: Bayesian Optimisation (Sobol + GP), then finite differences.
+
+    The first ``n_initial`` evaluations use a skopt GP with Sobol initial
+    sampling followed by standard GP-based BO.  Once ``n_initial`` results
+    have been collected the optimizer switches to ``FiniteDifferenceOptimizer``
+    warm-started from the current best point found by BO — the best point is
+    injected directly as the FD base so it is never re-evaluated.
+
+    Configuration knobs (all inside ``bo_options``):
+        n_initial_sobol : int   – how many of the BO iterations use Sobol
+                                  sampling before GP takes over (default 5).
+        bayesian_kind   : str   – skopt base estimator (default "GP").
+        random_state    : int   – RNG seed (default 42).
+    """
+
+    def __init__(
+        self,
+        parameters: list[ParameterSpec],
+        *,
+        n_initial: int,
+        bo_options: dict[str, Any],
+        fd_options: dict[str, Any],
+        epsilon: float | None = None,
+        window: int = 3,
+    ):
+        self.bo_iterations = n_initial
+        self.epsilon = epsilon
+        self.window = window
+        self._parameters = parameters
+
+        from skopt import Optimizer as SkoptOptimizer
+        from skopt.space import Real
+        bo_opts = bo_options or {}
+        bo_dimensions = [Real(p.low, p.high, name=p.name) for p in self._parameters]
+        n_sobol = int(bo_opts.get("n_initial_sobol", min(5, n_initial)))
+
+        self._bo_optimizer = SkoptOptimizer(
+            dimensions=bo_dimensions,
+            base_estimator=bo_opts.get("bayesian_kind", "GP"),
+            n_initial_points=n_sobol,
+            initial_point_generator="sobol",
+            random_state=bo_opts.get("random_state", 42),
+        )
+
+        self._fd_optimizer = FiniteDifferenceOptimizer(
+            parameters=self._parameters,
+            options=fd_options or {},
+            epsilon=epsilon,
+            window=window,
+        )
+
+        self._phase = "bayesian"
+        self._fd_seeded = False
+
+        self._history_x: list[list[float]] = []
+        self._history_y: list[float] = []
+
+    # ------------------------------------------------------------------ #
+    # Transition helper                                                   #
+    # ------------------------------------------------------------------ #
+
+    def _seed_fd_from_bo_best(self) -> None:
+        """Inject BO best into FD optimizer as starting base, skipping re-evaluation."""
+        if self._fd_seeded:
+            return
+        best_idx = int(np.argmin(self._history_y))
+        best_x = np.array(self._history_x[best_idx], dtype=float)
+        best_y = float(self._history_y[best_idx])
+        # Directly set FD internal state so the state machine skips the
+        # "evaluate initial point" step and begins probing immediately.
+        self._fd_optimizer._base   = best_x
+        self._fd_optimizer._base_y = best_y
+        self._fd_optimizer._start_probing()
+        self._fd_seeded = True
+
+    # ------------------------------------------------------------------ #
+    # ask / tell                                                          #
+    # ------------------------------------------------------------------ #
+
+    def ask(self) -> list[float]:
+        if len(self._history_y) < self.bo_iterations:
+            self._phase = "bayesian"
+            return self._bo_optimizer.ask()
+
+        self._phase = "finite_difference"
+        self._seed_fd_from_bo_best()
+        return self._fd_optimizer.ask()
+
+    def tell(self, x: list[float], y: float) -> None:
+        self._history_x.append(list(x))
+        self._history_y.append(float(y))
+
+        if self._phase == "bayesian":
+            self._bo_optimizer.tell(x, y)
+        else:
+            self._fd_optimizer.tell(x, y)
+
+    def should_stop(self) -> bool:
+        if self._phase == "bayesian":
+            return _should_stop(self._history_y, self.epsilon, window=self.window)
+        return self._fd_optimizer.should_stop()
+
+    # ------------------------------------------------------------------ #
+    # Validation                                                          #
+    # ------------------------------------------------------------------ #
+
+    def test_config(self) -> None:
+        if self.bo_iterations < 1:
+            raise ValueError(
+                f"n_initial must be >= 1 for the BO phase, got {self.bo_iterations}."
+            )
+        if self.epsilon is not None and self.epsilon <= 0:
+            raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+        self._fd_optimizer.test_config()
+
+    # ------------------------------------------------------------------ #
+    # Persistence                                                         #
+    # ------------------------------------------------------------------ #
+
+    def get_state(self) -> dict[str, Any]:
+        return {
+            "phase":     self._phase,
+            "fd_seeded": self._fd_seeded,
+            "history_x": self._history_x,
+            "history_y": self._history_y,
+        }
+
+    def set_state(self, state: dict[str, Any]) -> None:
+        self._phase     = state.get("phase", "bayesian")
+        self._fd_seeded = state.get("fd_seeded", False)
+        self._history_x = state.get("history_x", [])
+        self._history_y = state.get("history_y", [])
+
+
+# --------------------------------------------------------------------- #
 # skopt GP wrapper                                                      #
 # --------------------------------------------------------------------- #
 
@@ -808,6 +1373,14 @@ def build_optimizer(
         )
         opt = SkoptGPOptimizer(skopt_opt, epsilon=eps, window=window)
 
+    elif kind == "pso":
+        opt = ParticleSwarmOptimizer(
+            parameters,
+            options=opts,
+            epsilon=eps,
+            window=window,
+        )
+
     elif kind == "nelder_mead":
         opt = NelderMeadOptimizer(
             parameters,
@@ -836,6 +1409,26 @@ def build_optimizer(
 
     elif kind == "hybrid_fd_bayes":
         opt = HybridFiniteDifferenceBayesOptimizer(
+            parameters,
+            n_initial=opts.get("n_initial", 8),
+            bo_options=opts.get("bo_options", {}),
+            fd_options=opts.get("fd_options", {}),
+            epsilon=eps,
+            window=window,
+        )
+
+    elif kind == "hybrid_bayes_nm":
+        opt = HybridBayesNelderMeadOptimizer(
+            parameters,
+            n_initial=opts.get("n_initial", 8),
+            bo_options=opts.get("bo_options", {}),
+            nm_options=opts.get("nm_options", {}),
+            epsilon=eps,
+            window=window,
+        )
+
+    elif kind == "hybrid_bayes_fd":
+        opt = HybridBayesFiniteDifferenceOptimizer(
             parameters,
             n_initial=opts.get("n_initial", 8),
             bo_options=opts.get("bo_options", {}),

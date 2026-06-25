@@ -111,6 +111,9 @@ class OptimizerSection(BaseModel):
                   "finite_differences",
                   "hybrid_nm_bayes",
                   "hybrid_fd_bayes",
+                  "hybrid_bayes_fd",
+                  "hybrid_bayes_nm",
+                  "pso",
                   ]
     stopping_criteria: dict[str, Any] = {"n_calls": 32,
                                          "epsilon": 1e-4,

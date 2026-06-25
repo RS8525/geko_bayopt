@@ -37,7 +37,9 @@ What counts as a *meaningful step* differs by optimizer type — raw function ev
 - **BO (`skopt_gp`)**: every evaluation counts. The window slides over the last `window` objective values.
 - **Nelder-Mead**: only one entry per NM iteration (i.e. per simplex operation that produces a new reflection candidate). The D+1 startup evaluations and individual probe calls within a shrink are not counted.
 - **Finite differences**: only one entry per complete gradient cycle (the best-so-far value after the gradient step is accepted). The D probe evaluations used to estimate the gradient are invisible to the convergence check.
-- **Hybrid optimizers**: during the warm-up phase the sub-optimizer's check is used (NM or FD logic above); during the BO phase all evaluations count.
+- **PSO**: only one entry per completed swarm iteration (the global-best value after all `n_particles` results in that iteration are processed). Individual particle evaluations are invisible to the convergence check.
+- **Hybrid optimizers (warm-up → BO)**: during the warm-up phase (NM or FD) the sub-optimizer's logic above applies; during the BO phase all evaluations count.
+- **Hybrid optimizers (BO → refinement)**: during the BO phase all evaluations count; during the refinement phase (NM or FD) the sub-optimizer's logic above applies.
 
 With the default `window=3`, at least `2 × window = 6` meaningful steps must have occurred before the check can trigger, preventing spurious early stops at the very start.
 
@@ -213,5 +215,134 @@ The epsilon check uses FD gradient-step logic during Phase 1 and a sliding windo
 
 `bo_options`: same as for `hybrid_nm_bayes`.  
 `fd_options`: same options as the standalone `finite_differences` kind.
+
+---
+
+### `hybrid_bayes_nm` — Bayesian → Nelder-Mead
+
+Phase 1: first `n_initial` evaluations use BO (Sobol sampling, then GP surrogate).  
+Phase 2: remaining evaluations use Nelder-Mead, with its startup simplex re-centred on the best point found by BO (instead of the GEKO defaults).
+
+The epsilon check uses a sliding window over all evaluations during Phase 1 and NM simplex-iteration logic during Phase 2.
+
+```json
+"optimizer": {
+    "kind": "hybrid_bayes_nm",
+    "stopping_criteria": {
+        "n_calls": 30,
+        "epsilon": 1e-4,
+        "window": 3
+    },
+    "kind_specific_options": {
+        "n_initial": 10,
+        "bo_options": {
+            "n_initial_sobol": 5,
+            "bayesian_kind": "GP",
+            "random_state": 42
+        },
+        "nm_options": {
+            "alpha": 0.8,
+            "gamma": 1.5,
+            "rho": 0.5,
+            "sigma": 0.5
+        }
+    }
+}
+```
+
+Phase split example above: 10 BO evaluations (5 Sobol + 5 GP), then Nelder-Mead starting from the BO best.
+
+`bo_options`:
+
+| Option | Default | Description |
+|---|---|---|
+| `n_initial_sobol` | `min(5, n_initial)` | Number of Sobol samples before the GP surrogate takes over within the BO phase. |
+| `bayesian_kind` | `"GP"` | Surrogate type: `"GP"`, `"RF"`, `"ET"`, or `"GBRT"`. |
+| `random_state` | `42` | Seed for the Sobol sampler and GP. |
+
+`nm_options`: same options as the standalone `nelder_mead` kind.
+
+---
+
+### `hybrid_bayes_fd` — Bayesian → Finite Differences
+
+Phase 1: first `n_initial` evaluations use BO (Sobol sampling, then GP surrogate).  
+Phase 2: remaining evaluations use finite-difference gradient descent, starting from the best point found by BO (injected directly as the FD base — not re-evaluated).
+
+The epsilon check uses a sliding window over all evaluations during Phase 1 and FD gradient-step logic during Phase 2.
+
+```json
+"optimizer": {
+    "kind": "hybrid_bayes_fd",
+    "stopping_criteria": {
+        "n_calls": 30,
+        "epsilon": 1e-4,
+        "window": 3
+    },
+    "kind_specific_options": {
+        "n_initial": 10,
+        "bo_options": {
+            "n_initial_sobol": 5,
+            "bayesian_kind": "GP",
+            "random_state": 42
+        },
+        "fd_options": {
+            "step_size": 0.05,
+            "learning_rate": 0.2,
+            "min_step": 1e-5,
+            "max_step": 0.25
+        }
+    }
+}
+```
+
+`bo_options`: same as for `hybrid_bayes_nm`.  
+`fd_options`: same options as the standalone `finite_differences` kind.
+
+---
+
+### `pso` — Particle Swarm Optimization
+
+A swarm of `n_particles` particles explores the parameter space simultaneously. Each particle tracks its own personal best and is attracted toward the global best. Particle evaluations are serialised (one `ask()`/`tell()` at a time); a full swarm iteration completes after `n_particles` evaluations.
+
+Initial positions are drawn uniformly at random within the parameter bounds. The inertia weight decays linearly from `w_start` to `w_end` over `max_iter` swarm iterations. If a particle overshoots a bound, it is placed on the boundary and its velocity in that dimension is zeroed (absorption).
+
+`max_iter` is a **required** option. Set it to `n_calls // n_particles` to span the full budget, or lower to decay inertia more aggressively.
+
+```json
+"optimizer": {
+    "kind": "pso",
+    "stopping_criteria": {
+        "n_calls": 200,
+        "epsilon": 1e-4,
+        "window": 5
+    },
+    "kind_specific_options": {
+        "max_iter": 20,
+        "n_particles": 10,
+        "w_start": 0.9,
+        "w_end": 0.4,
+        "c1": 1.5,
+        "c2": 1.5,
+        "v_max_frac": 0.2,
+        "random_state": 42
+    }
+}
+```
+
+Config above: 20 particles × 10 swarm iterations = 200 total evaluations. Inertia decays from 0.9 → 0.4 over those 20 iterations.
+
+`kind_specific_options`:
+
+| Option | Default | Description |
+|---|---|---|
+| `max_iter` | *(required)* | Total swarm iterations for the linear inertia decay. |
+| `n_particles` | `10` | Number of particles in the swarm. |
+| `w_start` | `0.9` | Initial inertia weight. |
+| `w_end` | `0.4` | Final inertia weight (reached at `max_iter`). |
+| `c1` | `1.5` | Cognitive coefficient (pull toward personal best). |
+| `c2` | `1.5` | Social coefficient (pull toward global best). |
+| `v_max_frac` | `0.2` | Maximum velocity per dimension as a fraction of that dimension's range. |
+| `random_state` | `42` | Seed for the random number generator. |
 
 ---
