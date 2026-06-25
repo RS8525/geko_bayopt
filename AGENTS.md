@@ -109,6 +109,11 @@ The repository separates *inputs* (things you provide) from *outputs* (things th
 
 Both `geometry_path` and `dns_path` in the experiment JSON are resolved relative to the repo root when they're not absolute. The repo root is auto-detected as the grandparent of the config file (`<root>/configs/<name>.json` → `<root>`).
 
+FFS production configs are one level below `configs/`, under
+`configs/ffs_final/`. Because the runner still uses the config grandparent,
+their input paths intentionally start with `../data/`. Run these configs from
+the repository root so explicit result paths resolve under `<repo>/results/`.
+
 ---
 
 ## Save-before-tell ordering
@@ -179,10 +184,12 @@ These are baked into `fluent/`:
 - `version="2d"` must NOT be passed to `launch_fluent` with `mode="meshing"` — that combination silently switches to the solver and breaks the workflow.
 - GEKO coefficients live at `solver.settings.setup.models.viscous.geko.<coef>.value` on Fluent 2026 R1.
 - Periodic forcing uses `/define/periodic-conditions/massflow-rate-specification?` with raw TUI (the structured paths drift between Fluent versions).
+- Do not include `x-coordinate` or `y-coordinate` in `PeriodicHillSolver.EXPORT_VARIABLES`. Fluent's ASCII exporter writes the coordinates automatically; requesting them explicitly duplicates both columns in the output.
 - Student license allows only one Fluent session at a time. If you see "Connection refused" on launch, check Task Manager for stray `fluent.exe` processes.
 - For the Forward-Facing Step case `"mask_hill": false` is required to avoid a Fluent error about "overlapping periodic interfaces". This is a quirk of the FFS geometry, which has a small ledge at the inlet that collides with the periodic interface. The hill mask (which zeros out the loss contribution from the hill region) is not needed for FFS since the ledge doesn't affect the loss.
 - For the Forward-Facing Step case, the `ceiling` zone must be converted to a `symmetry` boundary after mesh load and before inlet/outlet setup. Named selections can arrive from meshing as wall-type zones.
 - For the Forward-Facing Step case, the outlet is a `pressure-outlet` with static gauge pressure from `case.options.outlet_static_pressure` (default `0.0` Pa). Configure this with PyFluent's structured pressure-outlet settings, not the TUI prompt stream.
+- Configure the FFS velocity inlet and pressure outlet entirely through structured PyFluent settings. All momentum and turbulence inputs must be value-based; empty profile references cause persistent interpolation warnings and a false continuity-residual plateau. Keep outlet target mass flow disabled.
 
 ---
 
@@ -209,3 +216,29 @@ These are baked into `fluent/`:
 - `data/dns/ffs/average_z_dns_ffs.py` converts all raw `FFS_Reh*_SBES_Node` exports to `*_2D.csv`.
 - It maps the 20 primary spanwise planes to the canonical first-plane mesh and applies trapezoidal averaging.
 - Exact `(x, y)` grouping is invalid for these exports because coordinate noise fragments equivalent mesh points.
+
+## FFS total turbulent kinetic energy
+
+- The canonical comparison key is `"total-turbulent-kinetic-energy"` in `m^2/s^2`.
+- The active Re=6000 DNS/SBES reference is `FFS_Reh6000_SBES_Node_NEW_2D.csv`.
+- FFS DNS preprocessing uses `mean-tke_tot-dataset` where available, including the active Re=6000 reference. For legacy exports without that column, it derives total TKE on each raw 3D row as modeled `k` plus `0.5 * (u_rms^2 + v_rms^2 + w_rms^2)`, then performs z averaging.
+- For FFS RANS, Fluent's `turb-kinetic-energy` already represents total TKE and is exposed under the canonical key without changing the existing raw field.
+- Periodic-hills extraction retains its existing non-dimensional `turb-kinetic-energy` behavior.
+
+## Turbulent-viscosity findings
+
+- Fluent's `viscosity-turb` is dynamic turbulent viscosity in `kg/(m s)`.
+- Do not use `source-turbulent-viscosity`: its unit is `kg/(m s^2)`, so it is a turbulent-viscosity source rate rather than turbulent viscosity.
+- A direct RANS-to-SBES turbulent-viscosity comparison is not physically equivalent. In RANS, eddy viscosity represents the effect of the fully modeled turbulence. In SBES, the exported turbulent viscosity represents only the modeled/subgrid contribution; resolved turbulent transport is not included in that field.
+- Spanwise averaging can smooth localized turbulent-viscosity peaks, but it does not resolve the modeled-versus-resolved mismatch. Low SBES turbulent-viscosity values are therefore not, by themselves, evidence of an averaging error.
+- The final FFS optimization does not export, load, or score turbulent viscosity. It uses total TKE instead: RANS `turb-kinetic-energy` versus SBES resolved plus modeled TKE.
+- If turbulent viscosity is reintroduced later, define whether the intended comparison is modeled contribution only and establish a consistent dimensional or non-dimensional scaling before adding it to `RunResult.fields`.
+
+## Final FFS optimization configs
+
+- `configs/ffs_final/` contains one C_SEP/C_NW Bayesian optimization config for each of Re=2000, 3000, 4000, and 6000.
+- Each config hardcodes a unique `base_case_name`, DNS reference, fluid viscosity, inlet turbulence intensity, and inlet viscosity ratio.
+- Each run performs 48 evaluations: 16 Sobol initial points and 32 GP-guided proposals. Epsilon early stopping is disabled so every case receives the full budget.
+- The objective uses `Ux` and `total-turbulent-kinetic-energy` on a 360x120 common grid with the FFS step masked out.
+- The final GEDCP configurations use `lambda_preference = 0.5`. Each field contribution is its common-grid RMSE divided by the common-grid DNS standard deviation; the field contributions are summed and then multiplied by the GEKO default-coefficient preference factor.
+- Historical FFS configs live under `configs/ffs_retired/` and are not production inputs.

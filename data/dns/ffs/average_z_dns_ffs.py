@@ -34,15 +34,45 @@ DEFAULT_DATA_DIR = Path(__file__).resolve().parent
 RAW_PATTERN = "FFS_Reh*_SBES_Node"
 COORD_COLUMNS = ["x-coordinate", "y-coordinate", "z-coordinate"]
 NON_FIELD_COLUMNS = {"nodenumber", *COORD_COLUMNS}
+TOTAL_TKE_COLUMN = "total-turbulent-kinetic-energy"
+SOURCE_TOTAL_TKE_COLUMN = "mean-tke_tot-dataset"
+MODELED_TKE_COLUMN = "mean-turbulent-kinetic-energy--k-dataset"
+VELOCITY_RMS_COLUMNS = (
+    "rmse-x-velocity",
+    "rmse-y-velocity",
+    "rmse-z-velocity",
+)
 
 
 def _read_header(path: Path) -> list[str]:
     columns = pd.read_csv(path, nrows=0).columns.str.strip().tolist()
-    required = set(COORD_COLUMNS)
+    required = {
+        *COORD_COLUMNS,
+        MODELED_TKE_COLUMN,
+        *VELOCITY_RMS_COLUMNS,
+    }
     missing = sorted(required.difference(columns))
     if missing:
         raise ValueError(f"{path} is missing required columns: {missing}")
     return columns
+
+
+def _add_total_turbulent_kinetic_energy(chunk: pd.DataFrame) -> None:
+    """Add canonical total SBES TKE on each raw row before z averaging.
+
+    Prefer the export's explicit total-TKE dataset when available, including
+    the active Re=6000 ``_NEW`` export. For legacy files lacking that column,
+    reconstruct it from modeled TKE and resolved velocity fluctuations:
+
+        k_total = k_modeled + 0.5 * (u_rms^2 + v_rms^2 + w_rms^2)
+    """
+
+    if SOURCE_TOTAL_TKE_COLUMN in chunk.columns:
+        chunk[TOTAL_TKE_COLUMN] = chunk[SOURCE_TOTAL_TKE_COLUMN]
+        return
+
+    resolved_tke = 0.5 * sum(chunk[column] ** 2 for column in VELOCITY_RMS_COLUMNS)
+    chunk[TOTAL_TKE_COLUMN] = chunk[MODELED_TKE_COLUMN] + resolved_tke
 
 
 def _read_coordinates(path: Path) -> pd.DataFrame:
@@ -132,6 +162,8 @@ def average_file(
     start = time.time()
     columns = _read_header(input_path)
     field_columns = [column for column in columns if column not in NON_FIELD_COLUMNS]
+    if TOTAL_TKE_COLUMN not in field_columns:
+        field_columns.append(TOTAL_TKE_COLUMN)
 
     print(f"Reading coordinates from {input_path} ...")
     coords = _read_coordinates(input_path)
@@ -155,6 +187,7 @@ def average_file(
     row_offset = 0
     for chunk in pd.read_csv(input_path, chunksize=chunksize):
         chunk.columns = chunk.columns.str.strip()
+        _add_total_turbulent_kinetic_energy(chunk)
         row_count = len(chunk)
         row_slice = slice(row_offset, row_offset + row_count)
         chunk_group_id = group_id[row_slice]
