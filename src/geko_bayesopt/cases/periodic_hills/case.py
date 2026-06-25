@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from matplotlib.style import use
 import numpy as np
 
 from ...fluent.case_config import CaseConfig
@@ -99,60 +100,60 @@ class PeriodicHillsCase(FlowCase):
             "0 "                       # flow direction y
         )
 
-    def load_dns(
-        self, dns_path: str | Path
-    ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
-        """Load Laizet ``mean_files.dat`` for this case.
+    # def load_dns(
+    #     self, dns_path: str | Path
+    # ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    #     """Load Laizet ``mean_files.dat`` for this case.
 
-        File format: whitespace-separated, columns (x, y, u, v, w, p).
-        Already in non-dimensional H, U_b units.
+    #     File format: whitespace-separated, columns (x, y, u, v, w, p).
+    #     Already in non-dimensional H, U_b units.
 
-        The cp gauge convention here matches the existing utility loader
-        (``cp = p - p[-1]``). This is grid-order dependent and should
-        be revisited for rigorous comparison.
-        """
-        dns_path = Path(dns_path)
-        if not dns_path.is_file():
-            raise FileNotFoundError(
-                f"DNS file not found: {dns_path}\n"
-                "Expected Laizet 2021 'mean_files.dat' format."
-            )
+    #     The cp gauge convention here matches the existing utility loader
+    #     (``cp = p - p[-1]``). This is grid-order dependent and should
+    #     be revisited for rigorous comparison.
+    #     """
+    #     dns_path = Path(dns_path)
+    #     if not dns_path.is_file():
+    #         raise FileNotFoundError(
+    #             f"DNS file not found: {dns_path}\n"
+    #             "Expected Laizet 2021 'mean_files.dat' format."
+    #         )
 
-        data = np.genfromtxt(dns_path, dtype=float)
-        coords = data[:, :2]                  # x, y
-        u = data[:, 2]                        # u
-        v = data[:, 3]                        # v
-        # data[:, 4] is w (spanwise), unused in 2D RANS comparison
-        p = data[:, 5]                        # p
+    #     data = np.genfromtxt(dns_path, dtype=float)
+    #     coords = data[:, :2]                  # x, y
+    #     u = data[:, 2]                        # u
+    #     v = data[:, 3]                        # v
+    #     # data[:, 4] is w (spanwise), unused in 2D RANS comparison
+    #     p = data[:, 5]                        # p
 
-        cp = p                     
+    #     cp = p                     
 
-        fields = {
-            "Ux": u,
-            "Uy": v,
-            "p": p,
-            "cp": cp,
-        }
-        return coords, fields
+    #     fields = {
+    #         "Ux": u,
+    #         "Uy": v,
+    #         "p": p,
+    #         "cp": cp,
+    #     }
+    #     return coords, fields
 
 
 
 
 #use this in case of running Re=2800 case: (not sure how to mergge this):
-        # data = np.genfromtxt(dns_path, dtype=float,skip_header=1)
-        # coords = data[:, 1:3]                  # x, y
-        # u = data[:, 3]                        # u
-        # v = data[:, 4]                        # v
-        # k = data[:, 10] 
-        # prod_k = data[:, 7]
-        # dissipation = data[:, 8]
+        data = np.genfromtxt(dns_path, dtype=float,skip_header=1)
+        coords = data[:, 1:3]                  # x, y
+        u = data[:, 3]                        # u
+        v = data[:, 4]                        # v
+        k = data[:, 10] 
+        prod_k = data[:, 7]
+        dissipation = data[:, 8]
 
 
-        # fields = {
-        #     "Ux": u,
-        #     "Uy": v,
-        #     "turb-kinetic-energy": k,
-        #     "production-of-k": prod_k,
-        #     "turb-diss-rate": dissipation,
-        # }
-        # return coords, fields
+        fields = {
+            "Ux": u,
+            "Uy": v,
+            "turb-kinetic-energy": k,
+            "production-of-k": prod_k,
+            "turb-diss-rate": dissipation,
+        }
+        return coords, fields

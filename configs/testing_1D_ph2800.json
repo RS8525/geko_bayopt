@@ -19,11 +19,7 @@
         }
     },
     "parameters": [
-        {"name": "geko_csep", "low": 0.7, "high": 2.5},
-        {"name": "geko_cnw", "low": -2.0, "high": 2.0},
-        {"name": "geko_cmix", "low": -0.2, "high": 1.0},
-        {"name": "geko_cjet", "low": 0.0, "high": 1.2},
-        {"name": "geko_cturb", "low": 1.5, "high": 2.0}
+        {"name": "geko_csep", "low": 0.7, "high": 2.5}
     ],
     "objective": {
     "kind": "gedcp",
@@ -38,8 +34,8 @@
     "optimizer": {
         "kind": "skopt_gp",
         "stopping_criteria": {
-            "n_calls": 40,
-            "epsilon": 1e-4
+            "n_calls": 20,
+            "epsilon": null
         },
         "kind_specific_options": {
             "n_initial": 8,
