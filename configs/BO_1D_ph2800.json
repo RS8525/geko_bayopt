@@ -1,5 +1,5 @@
-﻿{
-    "experiment_id": "optimizer_test_bo",
+{
+    "experiment_id": "BO_1D_2800",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -15,30 +15,30 @@
             "zone_top": "wall",
             "zone_bottom": "wall_lower",
             "geometry_path": "data/geometry/Periodic_Hill_10_90_3035.pmdb",
-            "dns_path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/alpha1.0_Re2800_Csep1.1540201646454422.ascii"
+            "dns_path": "data/dns/periodic_hills/dns_avg_Re2800_columnwise_organized.ascii"
         }
     },
     "parameters": [
         {"name": "geko_csep", "low": 0.7, "high": 2.5}
     ],
     "objective": {
-        "kind": "mae",
-        "options": {
-            "field_names": ["Ux","Uy","turb-kinetic-energy", "production-of-k"],
-            "integral_weights": {},
-            "lambda_field": 1.0,
-            "lambda_integral": 0.0,
-            "lambda_preference": 0.5
+    "kind": "gedcp",
+    "options": {
+        "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
+        "integral_weights": {},
+        "lambda_field": 1.0,
+        "lambda_integral": 0.0,
+        "lambda_preference": 0.5
         }
     },
     "optimizer": {
         "kind": "skopt_gp",
         "stopping_criteria": {
-            "n_calls": 22,
+            "n_calls": 20,
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_initial": 9,
+            "n_initial": 8,
             "random_state": 42
         }
     },
@@ -56,11 +56,11 @@
         "generate_quads": true
     },
     "residual_criteria": {
-        "continuity": 1.0e-7,
-        "x_velocity": 1.0e-7,
-        "y_velocity": 1.0e-7,
-        "k": 1.0e-7,
-        "omega": 1.0e-7
+        "continuity": 1.0e-5,
+        "x_velocity": 1.0e-5,
+        "y_velocity": 1.0e-5,
+        "k": 1.0e-5,
+        "omega": 1.0e-5
     },
     "session_strategy": "live",
     "keep_only_best_case_files": true

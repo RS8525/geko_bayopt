@@ -1,5 +1,5 @@
 {
-    "experiment_id": "periodic_hills_2800_v1",
+    "experiment_id": "PSO_1D_2800",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -32,15 +32,21 @@
         }
     },
     "optimizer": {
-        "kind": "skopt_gp",
-        "stopping_criteria": {
-            "n_calls": 20,
-            "epsilon": null
-        },
-        "kind_specific_options": {
-            "n_initial": 8,
-            "random_state": 42
-        }
+    "kind": "pso",
+    "stopping_criteria": {
+        "n_calls": 40,
+        "epsilon": null
+    },
+    "kind_specific_options": {
+        "max_iter": 10,
+        "n_particles": 4,
+        "w_start": 0.9,
+        "w_end": 0.4,
+        "c1": 1.5,
+        "c2": 1.5,
+        "v_max_frac": 0.2,
+        "random_state": 42
+    }
     },
     "mesh": {
         "length_unit": "mm",
