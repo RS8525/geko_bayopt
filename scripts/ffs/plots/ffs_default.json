@@ -1,14 +1,14 @@
 {
   "name": "ffs_default",
   "simulation": {
-    "path": "results/fluent/ffs_csep_v3/alpha1.0_Re6000_Csep0.9421.ascii",
+    "path": "results\\fluent\\ffs_total_tke_smoke\\ffs_Csep1.7463.ascii",
     "x_column": "x-coordinate",
     "y_column": "y-coordinate",
     "fields": {
       "Ux": "x-velocity",
       "Uy": "y-velocity",
       "p": "pressure",
-      "k": "turb-kinetic-energy"
+      "total-turbulent-kinetic-energy": "turb-kinetic-energy"
     },
     "transforms": {
       "p": {
@@ -17,18 +17,21 @@
     }
   },
   "dns": {
-    "path": "data/dns/ffs/FFS_Reh6000_SBES_Node_2D.csv",
+    "path": "data/dns/ffs/FFS_Reh6000_SBES_Node_NEW_2D.csv",
     "x_column": "x-coordinate",
     "y_column": "y-coordinate",
     "fields": {
       "Ux": "mean-x-velocity",
-      "k": "mean-turbulent-kinetic-energy--k-dataset"
+      "total-turbulent-kinetic-energy": "total-turbulent-kinetic-energy"
     },
     "transforms": {}
   },
   "plots": {
-    "simulation": ["Ux", "Uy", "p", "k"],
-    "dns": ["Ux", "k"],
-    "comparison": [["Ux", "Ux"], ["k", "k"]]
+    "simulation": ["Ux", "Uy", "p", "total-turbulent-kinetic-energy"],
+    "dns": ["Ux", "total-turbulent-kinetic-energy"],
+    "comparison": [
+      ["Ux", "Ux"],
+      ["total-turbulent-kinetic-energy", "total-turbulent-kinetic-energy"]
+    ]
   }
 }

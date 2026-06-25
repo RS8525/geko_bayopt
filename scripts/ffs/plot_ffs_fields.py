@@ -12,10 +12,15 @@ Configuration is stored outside this script. Each config file defines:
 - the relative input paths for the simulation and DNS data
 - which columns to plot in each dataset
 - which simulation/DNS field pairs to compare
+- optional ``plots.normalized_error`` common-grid settings and the subset of
+  comparison aliases that contribute to the field-only objective
 - the output folder name, which is used under ``scripts/ffs/plots/<name>/``
 
 For comparison plots, DNS values are interpolated onto the simulation grid
-before the difference is computed.
+before the difference is computed. Normalized-error plots instead interpolate
+both datasets to the objective's common grid and show
+``(simulation - DNS) / std(DNS)``. Their reported contribution is the
+normalized RMSE used by the field objective, excluding parameter preference.
 """
 
 from __future__ import annotations
@@ -34,6 +39,12 @@ import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
+
+from geko_bayesopt.objective.field_error import (
+    _common_grid,
+    _idw_interpolate,
+    _wstd,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -100,7 +111,18 @@ def _ffs_triangle_mask(tri: mtri.Triangulation, x: np.ndarray, y: np.ndarray) ->
     tri_x = x[triangles]
     tri_y = y[triangles]
     floor_y = _ffs_floor(tri_x)
-    return np.any(tri_y < floor_y - 1e-12, axis=1)
+    below_floor = np.any(tri_y < floor_y - 1e-12, axis=1)
+
+    # A triangulation of a floor-masked uniform grid can bridge the vertical
+    # step face: all vertices are valid, but the triangle interior crosses
+    # the downstream solid. Reject triangles spanning x=0 with an upstream
+    # vertex below the downstream floor.
+    crosses_step_face = (
+        (np.min(tri_x, axis=1) < 0.0)
+        & (np.max(tri_x, axis=1) >= 0.0)
+        & (np.min(tri_y, axis=1) < 0.0)
+    )
+    return below_floor | crosses_step_face
 
 
 def _triangulation_with_mask(
@@ -317,6 +339,65 @@ def _plot_comparison(
     print(f"{sim_name} vs {dns_name}: RMSE={rmse:.6g}, MAE={mae:.6g}")
 
 
+def _plot_normalized_error(
+    sim_x: np.ndarray,
+    sim_y: np.ndarray,
+    sim_values: np.ndarray,
+    dns_x: np.ndarray,
+    dns_y: np.ndarray,
+    dns_values: np.ndarray,
+    sim_name: str,
+    dns_name: str,
+    output_path: Path,
+    settings: dict,
+) -> float:
+    """Plot the signed pointwise error used by the common-grid objective."""
+
+    dns_coords = np.column_stack((dns_x, dns_y))
+    sim_coords = np.column_stack((sim_x, sim_y))
+    grid = _common_grid(
+        dns_coords,
+        nx=settings.get("common_grid_nx", 360),
+        ny=settings.get("common_grid_ny", 120),
+        floor_mode=settings.get("common_grid_floor"),
+    )
+    dns_grid = _idw_interpolate(dns_coords, dns_values, grid)
+    sim_grid = _idw_interpolate(sim_coords, sim_values, grid)
+    weights = np.ones(len(grid), dtype=float)
+
+    dns_std = max(_wstd(dns_grid, weights), 1e-8)
+    normalized_error = (sim_grid - dns_grid) / dns_std
+    field_score = float(np.sqrt(np.mean(normalized_error**2)))
+
+    limit = float(np.max(np.abs(normalized_error)))
+    limit = max(limit, 1e-12)
+    levels = np.linspace(-limit, limit, FIELD_LEVELS)
+    tri = _triangulation_with_mask(grid[:, 0], grid[:, 1])
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    contour = ax.tricontourf(
+        tri,
+        normalized_error,
+        levels=levels,
+        cmap=ERROR_CMAP,
+        norm=mcolors.TwoSlopeNorm(vcenter=0.0, vmin=-limit, vmax=limit),
+    )
+    ax.set_title(
+        f"Normalized error {sim_name} - {dns_name}\n"
+        f"field objective contribution = {field_score:.6g}"
+    )
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(True)
+    fig.colorbar(contour, ax=ax, label="(simulation - DNS) / std(DNS)")
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+    return field_score
+
+
 def _load_config(config_path: Path) -> dict:
     with config_path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -431,6 +512,14 @@ def main() -> None:
         )
         print(f"Saved {output_path}")
 
+    normalized_settings = cfg.get("plots", {}).get("normalized_error")
+    objective_fields = set(
+        normalized_settings.get("objective_fields", [])
+        if normalized_settings
+        else []
+    )
+    objective_field_total = 0.0
+
     for pair in cfg.get("plots", {}).get("comparison", []):
         if not isinstance(pair, list) or len(pair) != 2:
             raise ValueError("Each comparison entry must be a 2-item list: [simulation_name, dns_name]")
@@ -453,6 +542,36 @@ def main() -> None:
             output_path=output_path,
         )
         print(f"Saved {output_path}")
+
+        if normalized_settings:
+            normalized_path = (
+                output_dir / f"normalized_error_{sim_name}_vs_{dns_name}.png"
+            )
+            field_score = _plot_normalized_error(
+                sim_x=sim_x,
+                sim_y=sim_y,
+                sim_values=sim_fields[sim_name],
+                dns_x=dns_x,
+                dns_y=dns_y,
+                dns_values=dns_fields[dns_name],
+                sim_name=sim_name,
+                dns_name=dns_name,
+                output_path=normalized_path,
+                settings=normalized_settings,
+            )
+            print(
+                f"{sim_name} normalized field contribution: {field_score:.6g}"
+            )
+            print(f"Saved {normalized_path}")
+            if sim_name in objective_fields:
+                objective_field_total += field_score
+
+    if normalized_settings and objective_fields:
+        print(
+            "Field-only objective "
+            f"({', '.join(sorted(objective_fields))}): "
+            f"{objective_field_total:.6g}"
+        )
 
     print(f"All plots written to {output_dir}")
 
