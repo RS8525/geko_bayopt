@@ -13,7 +13,12 @@ from geko_bayesopt.objective.field_error import FieldErrorCalculator
 
 
 ROOT = Path(__file__).resolve().parents[2]
-CONFIG_PATH = ROOT / "configs" / "ffs_csep_v3_density_validation.json"
+CONFIG_PATH = (
+    ROOT
+    / "configs"
+    / "ffs_retired"
+    / "ffs_csep_v3_density_validation.json"
+)
 
 
 def main() -> None:

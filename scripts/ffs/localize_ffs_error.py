@@ -11,7 +11,7 @@ from scipy.spatial import cKDTree
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DNS_PATH = ROOT / "data" / "dns" / "ffs" / "FFS_Reh6000_SBES_Node_2D.csv"
+DNS_PATH = ROOT / "data" / "dns" / "ffs" / "FFS_Reh6000_SBES_Node_NEW_2D.csv"
 ASCII_PATH = (
     ROOT
     / "results"
