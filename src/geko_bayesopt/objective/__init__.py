@@ -114,6 +114,7 @@ def objective_geko(
         "Uy": 1.0,
         "cp": 1.0,
         "turb-kinetic-energy": 1.0,
+        "total-turbulent-kinetic-energy": 1.0,
         "production-of-k": 1.0,
             }
     if field_names is None:

@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 
 from ...fluent.case_config import CaseConfig
+from ...types import RunResult
 from ..base import FlowCase
 
 
@@ -26,13 +27,20 @@ class ForwardFacingStepCase(FlowCase):
 
     case_id = "ffs"
 
+    _DEFAULT_DNS_COLUMNS = {
+        "Ux": "mean-x-velocity",
+        "Uy": "mean-y-velocity",
+        "p": "mean-pressure",
+        "total-turbulent-kinetic-energy": "total-turbulent-kinetic-energy",
+    }
+
     def build_case_config(self, options: dict[str, Any]) -> CaseConfig:
         """Construct a CaseConfig from the JSON options block.
 
         Required keys: step_height
         """
         return CaseConfig(
-            base_case_name="ffs",
+            base_case_name=options.get("base_case_name", "ffs"),
             
             # Using 'step_height' as the reference length for generic scaling
             hill_height=options["step_height"],
@@ -60,49 +68,64 @@ class ForwardFacingStepCase(FlowCase):
         # Named selections can arrive from meshing as wall zones. Convert
         # the FFS-specific boundary types before applying numeric BC values.
         self._set_zone_type(solver, cc.zone_top, "symmetry")
+        self._set_zone_type(solver, cc.zone_inlet, "velocity-inlet")
         self._set_zone_type(solver, cc.zone_outlet, "pressure-outlet")
 
-        # 1. Velocity Inlet
-        # Set velocity magnitude, turbulent specification method (Intensity and Viscosity Ratio)
-        #solver.execute_tui(
-            # Use Profile for gauge total pressure? (dependent on Fluent version prompts) -- wait, let's keep it simple and sequence-agnostic if possible, or adapt to the known sequence.
-            # TUI prompts for velocity-inlet usually go:
-            # Velocity Specification Method: Magnitude, Normal to Boundary
-            # Reference Frame: Absolute
-            # Velocity Magnitude: x
-            # Supersonic/Initial Gauge Pressure: y
-            # Turbulent Specification Method: Intensity and Viscosity Ratio
-            # Turbulent Intensity: z
-            # Turbulent Viscosity Ratio: w
-        
-        
-        # NOTE: A more robust way to set velocity inlet in TUI when prompts vary is to provide exactly what it asks, BUT often using the structured `solver.setup...` API is safer for standard BCs. For now, since the periodic case used TUI, let's do the standard TUI string for velocity inlet carefully. 
-        # A simpler TUI sequence for setting just the magnitude and turbulence:
-        #solver.execute_tui(f"/define/boundary-conditions/velocity-inlet {cc.zone_inlet} no no yes no {cc.inlet_velocity} no yes no yes intensity-and-viscosity-ratio {cc.turb_intensity} {cc.turb_viscosity_ratio}")
-
-        
-        solver.execute_tui(f"/define/boundary-conditions/velocity-inlet {cc.zone_inlet} "
-            f"yes "  # Velocity Specification Method: Magnitude and Direction
-            f"yes "  #Reference Frame: Absolute
-            f"no "   # Use Profile for Velocity Magnitude?
-            f"{cc.inlet_velocity} "
-            f"yes "  #Use Profile for Supersonic/Initial Gauge Pressure?
-            f"no "   #Use UDF Profile for Supersonic/Initial Gauge Pressure?
-            f"yes "  #Use Profile for X-Component of Flow Direction?
-            f"no "   #Use UDF Profile for X-Component of Flow Direction?
-            f"yes "  #Use Profile for Y-Component of Flow Direction?
-            f"no "   #Use UDF Profile for Y-Component of Flow Direction?
-            f"no "   #Turbulence Specification Method: K and Omega
-            f"no "   #Turbulence Specification Method: Intensity and Length Scale
-            f"yes "  #Turbulence Specification Method: Intensity and Viscosity Ratio
-            f"{cc.turb_intensity} " #Turbulent Intensity
-            f"{cc.turb_viscosity_ratio} ") #Turbulent Viscosity Ratio
-                            
-
-
-        # 2. Pressure Outlet
+        self._set_velocity_inlet(
+            solver,
+            cc.zone_inlet,
+            velocity=cc.inlet_velocity,
+            turbulent_intensity=cc.turb_intensity,
+            turbulent_viscosity_ratio=cc.turb_viscosity_ratio,
+        )
         self._set_pressure_outlet_static_pressure(
-            solver, cc.zone_outlet, cc.outlet_static_pressure
+            solver,
+            cc.zone_outlet,
+            static_pressure=cc.outlet_static_pressure,
+            turbulent_intensity=cc.turb_intensity,
+            turbulent_viscosity_ratio=cc.turb_viscosity_ratio,
+        )
+
+    @staticmethod
+    def _set_velocity_inlet(
+        solver,
+        zone_name: str,
+        *,
+        velocity: float,
+        turbulent_intensity: float,
+        turbulent_viscosity_ratio: float,
+    ) -> None:
+        """Configure a value-based inlet without empty profile references."""
+
+        try:
+            inlet = solver.settings.setup.boundary_conditions.velocity_inlet[
+                zone_name
+            ]
+            inlet.momentum.velocity_specification_method = (
+                "Magnitude, Normal to Boundary"
+            )
+            inlet.momentum.reference_frame = "Absolute"
+            inlet.momentum.velocity_magnitude.option = "value"
+            inlet.momentum.velocity_magnitude.value = velocity
+            inlet.momentum.initial_gauge_pressure.option = "value"
+            inlet.momentum.initial_gauge_pressure.value = 0.0
+
+            inlet.turbulence.turbulence_specification = (
+                "Intensity and Viscosity Ratio"
+            )
+            inlet.turbulence.turbulent_intensity = turbulent_intensity / 100.0
+            inlet.turbulence.turbulent_viscosity_ratio = (
+                turbulent_viscosity_ratio
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to configure FFS velocity inlet '{zone_name}' through "
+                "PyFluent settings."
+            ) from exc
+        print(
+            f"[ffs] Boundary '{zone_name}' configured as velocity-inlet "
+            f"with velocity {velocity} and turbulence intensity "
+            f"{turbulent_intensity}%."
         )
 
     @staticmethod
@@ -122,9 +145,14 @@ class ForwardFacingStepCase(FlowCase):
 
     @staticmethod
     def _set_pressure_outlet_static_pressure(
-        solver, zone_name: str, static_pressure: float
+        solver,
+        zone_name: str,
+        *,
+        static_pressure: float,
+        turbulent_intensity: float,
+        turbulent_viscosity_ratio: float,
     ) -> None:
-        """Set pressure-outlet gauge pressure and backflow pressure mode.
+        """Set value-based pressure-outlet and backflow conditions.
 
         The FFS reference uses a static-pressure outlet. Use the structured
         PyFluent settings tree instead of TUI prompt streams, because the
@@ -135,11 +163,21 @@ class ForwardFacingStepCase(FlowCase):
             outlet = solver.settings.setup.boundary_conditions.pressure_outlet[
                 zone_name
             ]
-            outlet.momentum.pressure_spec = "Gauge Pressure"
             outlet.momentum.gauge_pressure.option = "value"
             outlet.momentum.gauge_pressure.value = static_pressure
             outlet.momentum.backflow_pressure_spec = "Static Pressure"
-            outlet.momentum.backflow_pressure_specification = "Static Pressure"
+            outlet.momentum.backflow_dir_spec_method = "Normal to Boundary"
+            outlet.momentum.target_mass_flow_rate = False
+
+            outlet.turbulence.turbulence_specification = (
+                "Intensity and Viscosity Ratio"
+            )
+            outlet.turbulence.backflow_turbulent_intensity = (
+                turbulent_intensity / 100.0
+            )
+            outlet.turbulence.backflow_turbulent_viscosity_ratio = (
+                turbulent_viscosity_ratio
+            )
         except Exception as exc:
             raise RuntimeError(
                 "Failed to configure FFS pressure outlet "
@@ -156,30 +194,85 @@ class ForwardFacingStepCase(FlowCase):
         """Load FFS DNS reference data.
 
         File format: CSV with header.
-        Columns used: x-coordinate, y-coordinate, mean-x-velocity, mean-y-velocity, mean-pressure.
-        Currently loads dimensional data as-is to match extract.py setup.
-        """
+        Column names can be overridden with ``case.options.dns_columns``.
+        Known fields are loaded when present; Ux, Uy, and pressure remain
+        required for backward compatibility with existing FFS objectives.
 
-        
+        Values remain dimensional to match the current FFS extraction:
+        velocity in m/s, pressure in Pa, and total TKE in m^2/s^2.
+        """
         dns_path = Path(dns_path)
         if not dns_path.is_file():
             raise FileNotFoundError(f"DNS file not found: {dns_path}")
 
         df = pd.read_csv(dns_path)
+        df.columns = df.columns.str.strip()
 
-        x = df["x-coordinate"].to_numpy()
-        y = df["y-coordinate"].to_numpy()
+        coordinate_columns = {
+            "x": "x-coordinate",
+            "y": "y-coordinate",
+        }
+        coordinate_columns.update(self.options.get("dns_coordinate_columns", {}))
+
+        field_columns = dict(self._DEFAULT_DNS_COLUMNS)
+        configured_fields = self.options.get("dns_columns", {})
+        field_columns.update(configured_fields)
+
+        required_columns = {
+            coordinate_columns["x"],
+            coordinate_columns["y"],
+            field_columns["Ux"],
+            field_columns["Uy"],
+            field_columns["p"],
+        }
+        missing = sorted(required_columns.difference(df.columns))
+        if missing:
+            raise KeyError(
+                f"FFS DNS file {dns_path} is missing required column(s): {missing}. "
+                f"Available columns: {df.columns.tolist()}"
+            )
+
+        x = df[coordinate_columns["x"]].to_numpy()
+        y = df[coordinate_columns["y"]].to_numpy()
         coords = np.column_stack([x, y])
 
-        u = df["mean-x-velocity"].to_numpy()
-        v = df["mean-y-velocity"].to_numpy()
-        p = df["mean-pressure"].to_numpy()
+        fields: dict[str, np.ndarray] = {}
+        for field_name, column_name in field_columns.items():
+            if column_name in df.columns:
+                fields[field_name] = df[column_name].to_numpy()
+            elif field_name in configured_fields:
+                raise KeyError(
+                    f"Configured FFS DNS field {field_name!r} uses missing "
+                    f"column {column_name!r}."
+                )
 
-        fields = {
-            "Ux": u,
-            "Uy": v,
-            "p": p,
-            "cp": p,  # Aligning with current extract.py behavior
-        }
-        
+        fields["cp"] = fields["p"]  # Preserve current pressure convention.
         return coords, fields
+
+    def build_run_result(
+        self,
+        *,
+        run_id: str,
+        parameters: dict[str, float],
+        ascii_path: str | Path,
+        cost_seconds: float = 0.0,
+    ) -> RunResult:
+        """Build dimensional FFS output and expose RANS k as total TKE.
+
+        In RANS all turbulent kinetic energy is modeled, so Fluent's
+        ``turb-kinetic-energy`` is directly comparable to the SBES total:
+        resolved fluctuations plus modeled k.
+        """
+
+        result = super().build_run_result(
+            run_id=run_id,
+            parameters=parameters,
+            ascii_path=ascii_path,
+            cost_seconds=cost_seconds,
+        )
+        if "turb-kinetic-energy" in result.fields:
+            result.fields["total-turbulent-kinetic-energy"] = (
+                result.fields["turb-kinetic-energy"]
+                * self.case_config.u_bulk**2
+            )
+        return result
