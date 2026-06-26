@@ -37,6 +37,7 @@ _title = "Optimizer Comparison — Periodic Hills Re=2800, 1D (geko_csep)"
 
 OUT_PATH_LINEAR = REPO_ROOT / "optimizer_comparison_linear.png"
 OUT_PATH_LOG    = REPO_ROOT / "optimizer_comparison_log.png"
+OUT_PATH_ZOOM   = REPO_ROOT / "optimizer_comparison_zoom.png"
 
 
 # ------------------------------------------------------------------ #
@@ -79,7 +80,7 @@ def _fake_histories(n: int = 22) -> list[tuple[str, np.ndarray]]:
     ]
 
 
-def plot_comparison(include_fake: bool = False, log: bool = False) -> None:
+def plot_comparison(include_fake: bool = False, log: bool = False, zoom: bool = False) -> None:
     fig, ax = plt.subplots(figsize=(10, 5))
 
     loaded: list[tuple[str, np.ndarray]] = []
@@ -121,13 +122,19 @@ def plot_comparison(include_fake: bool = False, log: bool = False) -> None:
             ax.plot(range(1, len(curve) + 1), curve,
                     linewidth=1.5, linestyle="--", alpha=0.5, label=label)
 
-    if log:
+    if log or zoom:
         ax.set_yscale("log")
+
+    if zoom and plot_data:
+        global_best_zoom = min(np.min(s) for _, s in loaded)
+        ax.set_xlim(13.5, max_iters + 0.5)
+        ax.set_ylim(global_best_zoom * 0.999,
+                    max(bsf[-1] for _, bsf, _, _, _, _ in plot_data) * 1.005)
 
     ax.axvline(x=n_initial + 0.5, color="red", linestyle="--", linewidth=1.2,
                label=f"BO: exploration → optimisation (iter {n_initial + 1})")
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Best cost so far" + (" (log scale)" if log else ""))
+    ax.set_ylabel("Best cost so far" + (" (log scale)" if log or zoom else ""))
     ax.set_title(_title)
 
     handles, labels = ax.get_legend_handles_labels()
@@ -139,8 +146,8 @@ def plot_comparison(include_fake: bool = False, log: bool = False) -> None:
     ax.legend(handles=handles, labels=labels, loc="upper right", fontsize=9)
     ax.grid(True, alpha=0.3)
 
-    # Inset zoom — linear plot only.
-    if not log and plot_data:
+    # Inset zoom — linear, non-zoom plot only.
+    if not log and not zoom and plot_data:
         global_best = min(np.min(s) for _, s in loaded)
 
         x0, x1 = 10.5, max_iters + 0.5
@@ -167,7 +174,7 @@ def plot_comparison(include_fake: bool = False, log: bool = False) -> None:
         ax.indicate_inset_zoom(axins, edgecolor="0.5")
 
     fig.tight_layout()
-    out_path = OUT_PATH_LOG if log else OUT_PATH_LINEAR
+    out_path = OUT_PATH_ZOOM if zoom else (OUT_PATH_LOG if log else OUT_PATH_LINEAR)
     fig.savefig(out_path, dpi=150)
     print(f"[plot] Saved -> {out_path}")
     plt.close(fig)
@@ -187,3 +194,4 @@ if __name__ == "__main__":
 
     plot_comparison(include_fake=args.fake, log=False)
     plot_comparison(include_fake=args.fake, log=True)
+    plot_comparison(include_fake=args.fake, zoom=True)
