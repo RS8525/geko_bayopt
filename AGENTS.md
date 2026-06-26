@@ -31,6 +31,7 @@ src/geko_bayesopt/
 ├── __init__.py
 ├── cli.py                  CLI entry (geko-opt run config.json)
 ├── config.py               Pydantic schemas for experiment JSON
+├── geko_defaults.py        Canonical Fluent GEKO baseline coefficients
 ├── types.py                RunResult dataclass (shared data contract)
 ├── experiment.py           BO loop (composition only, no logic)
 ├── store.py                metadata.csv + optimizer.pkl persistence
@@ -118,7 +119,12 @@ the repository root so explicit result paths resolve under `<repo>/results/`.
 
 ## Save-before-tell ordering
 
-The experiment loop runs in this order per trial:
+When `evaluate_default_first` is enabled (the default), a fresh experiment
+first runs Fluent with no GEKO coefficient overrides. This baseline is scored
+and saved with `trial_role="baseline"`, but it is never passed to
+`optimizer.tell()` and does not consume the optimizer's `n_calls` budget.
+
+The optimizer loop then runs in this order per trial:
 
 1. `optimizer.ask()` → parameter vector
 2. `solver.run_trial(params)` → ASCII + Fluent state
@@ -129,6 +135,24 @@ The experiment loop runs in this order per trial:
 7. `store.save_optimizer(optimizer)` ← checkpoint
 
 If a crash happens between (5) and (6), the next run replays completed trials from `metadata.csv` via `tell()` and continues. If we reversed (5) and (6), a crash there would leave the optimizer ahead of the durable record, which is unrecoverable.
+
+`metadata.csv` records `trial_role` as either `baseline` or `optimizer`.
+Resume replay and completed-call counting use only optimizer rows. Legacy
+metadata without this column is treated as optimizer-only data. If an existing
+experiment has optimizer trials but no baseline, rerunning it backfills only
+the independent baseline without changing optimizer history or budget.
+
+---
+
+## Output retention
+
+- `keep_only_best_case_files=true` keeps only the current-best solved
+  `.cas.h5`/`.dat.h5` pair and removes initialization cases.
+- `keep_all_ascii_files` defaults to the negation of
+  `keep_only_best_case_files`.
+- When `keep_all_ascii_files=false`, only the current-best optimizer ASCII and
+  every baseline ASCII are retained.
+- Baseline ASCII is always protected, independent of both retention settings.
 
 ---
 
@@ -205,10 +229,10 @@ These are baked into `fluent/`:
 ## FFS plotting helper
 
 - `scripts/ffs/plot_ffs_fields.py` is a standalone plotting helper for FFS DNS/simulation data.
-- Configuration lives in `scripts/ffs/plots/*.json`, and figures are written to `scripts/ffs/plots/<config-name>/`.
+- Configuration lives in `scripts/ffs/plots/*.json`; final-run reusable configs live in `scripts/ffs/plots/final/*.json`. Figures are written to `scripts/ffs/plots/<config-name>/`.
 - Simulation and DNS columns are selected by exported header strings; legacy numeric simulation indices are still accepted.
 - It does not participate in the main `src/geko_bayesopt` config flow.
-- Only `scripts/ffs/plots/ffs_default.json` is tracked; local working configs and generated figures stay ignored.
+- Tracked reusable configs cover the generic example, the Re=4000 and Re=6000 default-GEKO baselines, and the retained Re=4000 optimum. Other local working configs and generated figures stay ignored.
 - Keep each JSON config in sync with the specific DNS and simulation exports you want to inspect.
 
 ## FFS DNS conversion helper
@@ -239,6 +263,8 @@ These are baked into `fluent/`:
 - `configs/ffs_final/` contains one C_SEP/C_NW Bayesian optimization config for each of Re=2000, 3000, 4000, and 6000.
 - Each config hardcodes a unique `base_case_name`, DNS reference, fluid viscosity, inlet turbulence intensity, and inlet viscosity ratio.
 - Each run performs 48 evaluations: 16 Sobol initial points and 32 GP-guided proposals. Epsilon early stopping is disabled so every case receives the full budget.
+- All final FFS runs require continuity, velocity, `k`, and `omega` residuals
+  to reach `1e-6`.
 - The objective uses `Ux` and `total-turbulent-kinetic-energy` on a 360x120 common grid with the FFS step masked out.
 - The final GEDCP configurations use `lambda_preference = 0.5`. Each field contribution is its common-grid RMSE divided by the common-grid DNS standard deviation; the field contributions are summed and then multiplied by the GEKO default-coefficient preference factor.
 - Historical FFS configs live under `configs/ffs_retired/` and are not production inputs.

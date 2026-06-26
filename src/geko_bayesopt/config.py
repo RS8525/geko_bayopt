@@ -40,7 +40,7 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ParameterSpec(BaseModel):
@@ -163,8 +163,27 @@ class ExperimentConfig(BaseModel):
     session_strategy: Literal["live", "per_trial"] = "live"
 
     # If True, after each trial delete any .cas/.dat files that don't
-    # belong to the current-best trial. The .ascii is always preserved.
+    # belong to the current-best trial.
     keep_only_best_case_files: bool = True
+
+    # Run and score Fluent's canonical GEKO defaults before optimization.
+    # This baseline is saved independently and never passed to the optimizer.
+    evaluate_default_first: bool = True
+
+    # Preserve every ASCII export. When omitted, this defaults to the
+    # negation of keep_only_best_case_files. The baseline ASCII is always kept.
+    keep_all_ascii_files: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_ascii_retention_default(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        values = dict(data)
+        if values.get("keep_all_ascii_files") is None:
+            keep_only_best = values.get("keep_only_best_case_files", True)
+            values["keep_all_ascii_files"] = not keep_only_best
+        return values
 
     @classmethod
     def load(cls, path: str | Path) -> "ExperimentConfig":

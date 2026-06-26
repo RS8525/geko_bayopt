@@ -15,12 +15,14 @@ or flow case requires zero changes here.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from .cases import FlowCase, build_flow_case
 from .config import ExperimentConfig
 from .fluent.mesh_generator import MeshGenerator
 from .fluent.solver import PeriodicHillSolver
+from .geko_defaults import GEKO_DEFAULTS, defaults_for_parameters
 from .objective import build_loss_fn
 from .optimizer import build_optimizer, vector_to_params, params_to_vector
 from .store import ResultStore, cleanup_non_best_case_files
@@ -91,11 +93,11 @@ def _ensure_mesh(
 
 
 def _replay_into_optimizer(optimizer, store, parameters) -> int:
-    """Tell the optimizer about every completed trial in the store.
+    """Tell the optimizer about every completed optimizer trial in the store.
 
     Returns the number of trials replayed.
     """
-    completed = store.load_completed_trials()
+    completed = store.load_completed_trials(trial_role="optimizer")
     if not completed:
         return 0
 
@@ -104,6 +106,19 @@ def _replay_into_optimizer(optimizer, store, parameters) -> int:
         x = params_to_vector(trial.parameters, parameters)
         optimizer.tell(x, trial.score)
     return len(completed)
+
+
+def _should_run_default_baseline(
+    cfg: ExperimentConfig,
+    store: ResultStore,
+) -> bool:
+    """Return whether this invocation should execute or backfill the baseline."""
+    return cfg.evaluate_default_first and not store.has_baseline()
+
+
+def _baseline_run_id(flow_case: FlowCase) -> str:
+    """Return a deterministic filename-safe ID for the default GEKO run."""
+    return f"{flow_case.case_config.case_id}_geko_default"
 
 
 def run_experiment(
@@ -153,8 +168,9 @@ def run_experiment(
     # ---- Resume from prior runs, if any ----
     n_calls = cfg.optimizer.stopping_criteria.get("n_calls", 32)
     n_completed = _replay_into_optimizer(optimizer, store, cfg.parameters)
+    run_default_baseline = _should_run_default_baseline(cfg, store)
     n_remaining = n_calls - n_completed
-    if n_remaining <= 0:
+    if n_remaining <= 0 and not run_default_baseline:
         print(f"[experiment] All {n_calls} trials already completed. Nothing to do.")
         return
 
@@ -170,11 +186,13 @@ def run_experiment(
         _run_live_session(
             cfg, flow_case, mesh_path, fluent_work_dir,
             optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
+            run_default_baseline,
         )
     elif cfg.session_strategy == "per_trial":
         _run_per_trial(
             cfg, flow_case, mesh_path, fluent_work_dir,
             optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
+            run_default_baseline,
         )
     else:  # pragma: no cover -- pydantic enforces the literal
         raise ValueError(f"Unknown session_strategy: {cfg.session_strategy}")
@@ -189,6 +207,7 @@ def run_experiment(
 def _run_live_session(
     cfg, flow_case, mesh_path, fluent_work_dir,
     optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
+    run_default_baseline,
 ) -> None:
     """One Fluent process, reused for all trials. Faster, slightly riskier."""
     solver = PeriodicHillSolver(
@@ -196,6 +215,10 @@ def _run_live_session(
         ui_mode=ui_mode, flow_case=flow_case, residual_criteria=residual_criteria
     )
     with solver:
+        if run_default_baseline:
+            _do_default_baseline(
+                cfg, flow_case, loss_fn, store, fluent_work_dir, solver=solver
+            )
         for i in range(n_completed, cfg.optimizer.stopping_criteria.get("n_calls", 32)):
             _do_one_trial(
                 i, cfg, flow_case, optimizer, loss_fn, store,
@@ -209,8 +232,19 @@ def _run_live_session(
 def _run_per_trial(
     cfg, flow_case, mesh_path, fluent_work_dir,
     optimizer, loss_fn, store, n_completed, ui_mode, residual_criteria,
+    run_default_baseline,
 ) -> None:
     """Launch + exit Fluent per trial. Safer on Student licenses."""
+    if run_default_baseline:
+        solver = PeriodicHillSolver(
+            flow_case.case_config, mesh_path, fluent_work_dir,
+            ui_mode=ui_mode, flow_case=flow_case, residual_criteria=residual_criteria
+        )
+        with solver:
+            _do_default_baseline(
+                cfg, flow_case, loss_fn, store, fluent_work_dir, solver=solver
+            )
+
     for i in range(n_completed, cfg.optimizer.stopping_criteria.get("n_calls", 32)):
         solver = PeriodicHillSolver(
             flow_case.case_config, mesh_path, fluent_work_dir,
@@ -224,6 +258,43 @@ def _run_per_trial(
         if hasattr(optimizer, "should_stop") and optimizer.should_stop():
             print(f"[experiment] Early stop: epsilon convergence after {i + 1} trials.")
             break
+
+
+def _do_default_baseline(
+    cfg,
+    flow_case,
+    loss_fn,
+    store,
+    fluent_work_dir: Path,
+    *,
+    solver,
+) -> None:
+    """Run, score, and persist Fluent's defaults without touching the optimizer."""
+    t_start = time.time()
+    parameters = defaults_for_parameters(cfg.parameters)
+    run_id = _baseline_run_id(flow_case)
+
+    # Keep coefficient overrides as None so Fluent uses its configured defaults.
+    baseline_case = replace(
+        flow_case.case_config,
+        base_case_name=run_id,
+        **{name: None for name in GEKO_DEFAULTS},
+    )
+    print(f"\n[experiment] Baseline: GEKO defaults {parameters}")
+    outputs = solver.run_trial(baseline_case)
+
+    cost = time.time() - t_start
+    run_result = flow_case.build_run_result(
+        run_id=run_id,
+        parameters=parameters,
+        ascii_path=outputs["ascii"],
+        cost_seconds=cost,
+    )
+    score = loss_fn(run_result)
+    print(f"[experiment] Baseline score = {score:.6g} (cost {cost:.1f}s)")
+
+    store.save_trial(run_result, score, trial_role="baseline")
+    _cleanup_trial_outputs(cfg, store, fluent_work_dir)
 
 
 def _do_one_trial(
@@ -271,8 +342,28 @@ def _do_one_trial(
     optimizer.tell(x, score)
     store.save_optimizer(optimizer)
 
-    # 6. Cleanup .cas/.dat from non-best trials, if enabled.
-    if cfg.keep_only_best_case_files:
-        best = store.best_trial()
-        best_run_id = best.run_id if best is not None else None
-        cleanup_non_best_case_files(fluent_work_dir, best_run_id)
+    # 6. Apply case/data and ASCII retention policies.
+    _cleanup_trial_outputs(cfg, store, fluent_work_dir)
+
+
+def _cleanup_trial_outputs(
+    cfg: ExperimentConfig,
+    store: ResultStore,
+    fluent_work_dir: Path,
+) -> None:
+    """Apply configured retention while always protecting baseline ASCII."""
+    best = store.best_trial(trial_role="optimizer")
+    if best is None:
+        best = store.best_trial(trial_role="baseline")
+    best_run_id = best.run_id if best is not None else None
+    baseline_run_ids = {
+        trial.run_id
+        for trial in store.load_completed_trials(trial_role="baseline")
+    }
+    cleanup_non_best_case_files(
+        fluent_work_dir,
+        best_run_id,
+        keep_only_best_case_files=cfg.keep_only_best_case_files,
+        keep_all_ascii_files=cfg.keep_all_ascii_files,
+        protected_ascii_run_ids=baseline_run_ids,
+    )

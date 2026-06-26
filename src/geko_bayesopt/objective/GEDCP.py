@@ -22,18 +22,7 @@ from __future__ import annotations
 
 import numpy as np
 
-
-# Fluent's default GEKO coefficients. Used as the "preferred" anchor point
-# for the coefficient-preference penalty. Pass a custom dict if your
-# reference is different.
-GEKO_DEFAULTS: dict[str, float] = {
-    "geko_csep": 1.75,
-    "geko_cnw": 0.5,
-    "geko_cmix": 0.0,
-    "geko_cjet": 0.9,
-    "geko_ccorner": 1.0,
-    "geko_cturb": 2.0,
-}
+from ..geko_defaults import GEKO_DEFAULTS
 
 
 def coefficient_preference(

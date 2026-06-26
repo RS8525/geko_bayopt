@@ -66,11 +66,11 @@
     "generate_quads": true
   },
   "residual_criteria": {
-    "continuity": 0.0001,
-    "x_velocity": 0.0001,
-    "y_velocity": 0.0001,
-    "k": 0.0001,
-    "omega": 0.0001
+    "continuity": 0.000001,
+    "x_velocity": 0.000001,
+    "y_velocity": 0.000001,
+    "k": 0.000001,
+    "omega": 0.000001
   },
   "fluent_work_dir": "results/fluent/ffs_re2000_csep_cnw_final",
   "results_dir": "results/experiments/ffs_re2000_csep_cnw_final",

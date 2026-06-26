@@ -4,6 +4,9 @@ using a Plotting-class-compatible interface.
 
 Differences from the original Plotting class:
     - Reads ``metadata.csv`` directly (no need to pass ``history`` manually).
+    - Saves plots directly beside ``metadata.csv`` without opening windows.
+    - Shows the independent default-GEKO baseline when ``trial_role`` contains
+      a ``baseline`` row.
     - Uses scattered-data interpolation (griddata) for the 2D plot, since
       BO samples are NOT on a regular grid.
     - Plots a running MINIMUM (BO minimizes here, not maximizes).
@@ -19,12 +22,11 @@ Usage::
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 import matplotlib
-matplotlib.use("TkAgg")  # interactive on Windows; swap to "Agg" if no display
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -39,7 +41,7 @@ class BOMetadataPlotting:
     csv_path : str | Path
         Path to ``metadata.csv``.
     output_dir : str | Path, optional
-        Where to save PNGs. Defaults to ``<csv_dir>/plots/``.
+        Where to save PNGs. Defaults to the directory containing the CSV.
     n_initial : int, optional
         Number of initial random / Sobol points (vertical line on history
         plot). Pulled from your config's ``optimizer.n_initial``.
@@ -58,10 +60,21 @@ class BOMetadataPlotting:
         if not self.csv_path.is_file():
             raise FileNotFoundError(f"metadata.csv not found at {self.csv_path}")
 
-        self.df = pd.read_csv(self.csv_path).reset_index(drop=True)
+        metadata = pd.read_csv(self.csv_path)
+        if "trial_role" in metadata.columns:
+            self.baseline_df = metadata[
+                metadata["trial_role"] == "baseline"
+            ].reset_index(drop=True)
+            self.df = metadata[
+                metadata["trial_role"] != "baseline"
+            ].reset_index(drop=True)
+        else:
+            self.baseline_df = metadata.iloc[0:0].copy()
+            self.df = metadata.reset_index(drop=True)
+
         self.df["trial_index"] = self.df.index + 1
 
-        self.output_dir = Path(output_dir) if output_dir else self.csv_path.parent / "plots"
+        self.output_dir = Path(output_dir) if output_dir else self.csv_path.parent
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.n_initial = n_initial
@@ -86,6 +99,12 @@ class BOMetadataPlotting:
                 f"Available: {self.df.columns.tolist()}"
             )
 
+    def _baseline_row(self) -> pd.Series | None:
+        """Return the first stored baseline row, if present."""
+        if self.baseline_df.empty:
+            return None
+        return self.baseline_df.iloc[0]
+
     # ------------------------------------------------------------------ #
     # 1. Convergence history (running minimum)                           #
     # ------------------------------------------------------------------ #
@@ -93,8 +112,7 @@ class BOMetadataPlotting:
     def plot_running_minimum(
         self,
         reference_score: float | None = None,
-        show: bool = True,
-    ) -> None:
+    ) -> Path:
         """Plot the running-minimum score vs. trial index.
 
         Replaces the original ``plot_RunningMaximum``. We minimize here.
@@ -114,6 +132,17 @@ class BOMetadataPlotting:
             plt.axhline(reference_score, color="blue", linestyle="-",
                         label=f"Reference: {reference_score:.4g}")
 
+        baseline = self._baseline_row()
+        if baseline is not None:
+            baseline_score = float(baseline["score"])
+            plt.axhline(
+                baseline_score,
+                color="tab:orange",
+                linestyle=":",
+                linewidth=2,
+                label=f"Default GEKO baseline: {baseline_score:.4g}",
+            )
+
         if self.n_initial is not None:
             plt.axvline(self.n_initial, color="red", linestyle="--",
                         label="End of initial sampling")
@@ -124,10 +153,7 @@ class BOMetadataPlotting:
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        if show:
-            plt.show()
-        else:
-            self._save("bo_history.png")
+        return self._save("bo_history.png")
 
     # ------------------------------------------------------------------ #
     # 2. 1D parameter vs. score with monotone interpolation              #
@@ -137,8 +163,7 @@ class BOMetadataPlotting:
         self,
         param: str,
         reference: float | None = None,
-        show: bool = True,
-    ) -> None:
+    ) -> Path:
         """Plot ``score`` against one parameter, with a PCHIP interpolant
         through the (sorted, deduplicated) samples.
 
@@ -176,7 +201,23 @@ class BOMetadataPlotting:
             plt.axvline(reference, linestyle="--", color="blue",
                         label=f"Reference {param}={reference:.4f}")
 
-        cbar = plt.colorbar(label="Trial index")
+        baseline = self._baseline_row()
+        if baseline is not None and pd.notna(baseline.get(param)):
+            plt.scatter(
+                float(baseline[param]),
+                float(baseline["score"]),
+                marker="D",
+                s=110,
+                color="tab:orange",
+                edgecolors="black",
+                zorder=11,
+                label=(
+                    f"Default GEKO: {param}={baseline[param]:.4g}, "
+                    f"score={baseline['score']:.4g}"
+                ),
+            )
+
+        plt.colorbar(label="Trial index")
 
         plt.xlabel(param)
         plt.ylabel("Score")
@@ -184,10 +225,7 @@ class BOMetadataPlotting:
         plt.legend(loc="best")
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        if show:
-            plt.show()
-        else:
-            self._save(f"score_vs_{param}.png")
+        return self._save(f"score_vs_{param}.png")
 
     # ------------------------------------------------------------------ #
     # 3. 2D parameter sweep with scattered-data interpolation            #
@@ -200,8 +238,7 @@ class BOMetadataPlotting:
         x_ref: float | None = None,
         y_ref: float | None = None,
         n_smooth: int = 100,
-        show: bool = True,
-    ) -> None:
+    ) -> Path:
         """Plot a 2D contour of ``score`` over two parameters.
 
         Uses ``scipy.interpolate.griddata`` (scattered-data interpolation)
@@ -251,16 +288,31 @@ class BOMetadataPlotting:
             ax.axhline(y_ref, linestyle="--", color="orange", linewidth=1.2,
                        alpha=0.6, label=f"Reference {y_param}")
 
+        baseline = self._baseline_row()
+        if (
+            baseline is not None
+            and pd.notna(baseline.get(x_param))
+            and pd.notna(baseline.get(y_param))
+        ):
+            ax.scatter(
+                float(baseline[x_param]),
+                float(baseline[y_param]),
+                marker="D",
+                s=120,
+                color="tab:orange",
+                edgecolors="black",
+                linewidths=0.8,
+                zorder=11,
+                label=f"Default GEKO (score={baseline['score']:.4g})",
+            )
+
         ax.set_xlabel(x_param)
         ax.set_ylabel(y_param)
         ax.set_title(f"Score over ({x_param}, {y_param})")
         ax.legend(loc="upper right", fontsize=8)
         ax.grid(True, alpha=0.2)
         plt.tight_layout()
-        if show:
-            plt.show()
-        else:
-            self._save(f"score_2d_{x_param}_vs_{y_param}.png")
+        return self._save(f"score_2d_{x_param}_vs_{y_param}.png")
 
 
 def main() -> int:
