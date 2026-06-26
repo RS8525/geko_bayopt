@@ -67,10 +67,7 @@ data/dns/ffs/*.csv
 scripts/ffs/plots/*
 !scripts/ffs/plots/ffs_default.json
 !scripts/ffs/plots/final/
-scripts/ffs/plots/final/*
-!scripts/ffs/plots/final/ffs_re4000_geko_default.json
-!scripts/ffs/plots/final/ffs_re6000_geko_default.json
-!scripts/ffs/plots/final/ffs_re4000_optimal.json
+
 
 # Legacy local plot outputs from the previous helper location
 tests/plots/
