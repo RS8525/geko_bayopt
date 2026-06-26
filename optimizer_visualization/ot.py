@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
-REPO_ROOT = Path(__file__).parent.resolve()
+REPO_ROOT = Path(__file__).parent.parent.resolve()   # project root
 
 # ------------------------------------------------------------------ #
 # Configuration                                                       #
@@ -28,16 +28,21 @@ REPO_ROOT = Path(__file__).parent.resolve()
 n_initial = 8  # from BO_1D_ph2800.json: optimizer.kind_specific_options.n_initial
 
 RUNS = [
-    ("BO_1D_2800",  "Bayesian Opt (GP)"),
-    ("FD_1D_2800",  "Finite Differences"),
-    ("PSO_1D_2800", "Particle Swarm"),
+    ("BO_1D_2800",           "Bayesian Opt (GP)"),
+    ("FD_1D_2800",           "Finite Differences"),
+    ("NM_1D_2800",           "Nelder-Mead"),
+    ("PSO_1D_2800",          "Particle Swarm"),
+    ("optimizer_test_nm_bo", "Hybrid NM -> BO"),
 ]
 
 _title = "Optimizer Comparison — Periodic Hills Re=2800, 1D (geko_csep)"
 
-OUT_PATH_LINEAR = REPO_ROOT / "optimizer_comparison_linear.png"
-OUT_PATH_LOG    = REPO_ROOT / "optimizer_comparison_log.png"
-OUT_PATH_ZOOM   = REPO_ROOT / "optimizer_comparison_zoom.png"
+_PLOTS = Path(__file__).parent / "plots"
+_PLOTS.mkdir(exist_ok=True)
+
+OUT_PATH_LINEAR = _PLOTS / "optimizer_comparison_linear.png"
+OUT_PATH_LOG    = _PLOTS / "optimizer_comparison_log.png"
+OUT_PATH_ZOOM   = _PLOTS / "optimizer_comparison_zoom.png"
 
 
 # ------------------------------------------------------------------ #
@@ -47,7 +52,7 @@ OUT_PATH_ZOOM   = REPO_ROOT / "optimizer_comparison_zoom.png"
 def _load_scores(experiment_id: str) -> np.ndarray | None:
     """Return the raw score sequence from metadata.csv, or None if absent."""
     csv_path = (
-        REPO_ROOT / "Results" / "experiments" / experiment_id / "metadata.csv"
+        REPO_ROOT / "results" / "experiments" / experiment_id / "metadata.csv"
     )
     if not csv_path.exists():
         return None
