@@ -244,7 +244,8 @@ The epsilon check uses a sliding window over all evaluations during Phase 1 and 
             "alpha": 0.8,
             "gamma": 1.5,
             "rho": 0.5,
-            "sigma": 0.5
+            "sigma": 0.5,
+            "simplex_scale": 0.6
         }
     }
 }
@@ -260,7 +261,11 @@ Phase split example above: 10 BO evaluations (5 Sobol + 5 GP), then Nelder-Mead 
 | `bayesian_kind` | `"GP"` | Surrogate type: `"GP"`, `"RF"`, `"ET"`, or `"GBRT"`. |
 | `random_state` | `42` | Seed for the Sobol sampler and GP. |
 
-`nm_options`: same options as the standalone `nelder_mead` kind.
+`nm_options`: same options as the standalone `nelder_mead` kind, plus:
+
+| Option | Default | Description |
+|---|---|---|
+| `simplex_scale` | `1.0` | Scale factor applied to the NM startup simplex built around the BO best point. Values below 1 tighten local exploitation (e.g. `0.6` shrinks offsets to 60%). Has no effect on the standalone `nelder_mead` kind. |
 
 ---
 
@@ -298,6 +303,12 @@ The epsilon check uses a sliding window over all evaluations during Phase 1 and 
 
 `bo_options`: same as for `hybrid_bayes_nm`.  
 `fd_options`: same options as the standalone `finite_differences` kind.
+
+**Exploitation tip:** Because BO has already found a good starting point, the FD phase
+can use a smaller `step_size` and `learning_rate` to search more locally.  A ratio of
+60% of the standalone values is a reasonable starting point (e.g. `step_size=0.03`,
+`learning_rate` at 60% of the standalone value).  This tightens the gradient estimate
+near the BO best and reduces the risk of overshooting the minimum.
 
 ---
 

@@ -1076,7 +1076,13 @@ class HybridBayesNelderMeadOptimizer:
 
     def _build_nm_simplex(self, center: list[float]) -> list[list[float]]:
         """Build an n_dim+1 simplex around *center* using the same perturbation
-        offsets as NelderMeadOptimizer._build_initial_simplex."""
+        offsets as NelderMeadOptimizer._build_initial_simplex.
+
+        Pass ``simplex_scale`` in nm_options to shrink or expand the initial
+        simplex (default 1.0).  Values < 1 increase local exploitation;
+        values > 1 increase exploration from the BO best point.
+        """
+        scale = float(self._nm_optimizer.options.get("simplex_scale", 1.0))
         n_dim = len(center)
         bounds = self._nm_optimizer.bounds
 
@@ -1085,17 +1091,17 @@ class HybridBayesNelderMeadOptimizer:
 
         if n_dim == 1:
             return [
-                [clip(center[0] - 0.25, 0)],
-                [clip(center[0] + 0.25, 0)],
+                [clip(center[0] - 0.25 * scale, 0)],
+                [clip(center[0] + 0.25 * scale, 0)],
             ]
         lower = list(center)
         upper = list(center)
-        lower[0] = clip(center[0] - 0.25, 0)
-        upper[0] = clip(center[0] + 0.25, 0)
+        lower[0] = clip(center[0] - 0.25 * scale, 0)
+        upper[0] = clip(center[0] + 0.25 * scale, 0)
         points = [lower, upper]
         for dim in range(1, n_dim):
             pt = list(center)
-            pt[dim] = clip(center[dim] + 0.10, dim)
+            pt[dim] = clip(center[dim] + 0.10 * scale, dim)
             points.append(pt)
         return points
 

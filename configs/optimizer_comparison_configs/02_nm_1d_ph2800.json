@@ -1,5 +1,5 @@
 {
-    "experiment_id": "BO_1D_2800",
+    "experiment_id": "NM_1D_ph2800",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -22,24 +22,26 @@
         {"name": "geko_csep", "low": 0.7, "high": 2.5}
     ],
     "objective": {
-    "kind": "gedcp",
-    "options": {
-        "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
-        "integral_weights": {},
-        "lambda_field": 1.0,
-        "lambda_integral": 0.0,
-        "lambda_preference": 0.5
+        "kind": "gedcp",
+        "options": {
+            "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
+            "integral_weights": {},
+            "lambda_field": 1.0,
+            "lambda_integral": 0.0,
+            "lambda_preference": 0.5
         }
     },
     "optimizer": {
-        "kind": "skopt_gp",
+        "kind": "nelder_mead",
         "stopping_criteria": {
             "n_calls": 20,
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_initial": 8,
-            "random_state": 42
+            "alpha": 0.8,
+            "gamma": 1.5,
+            "rho": 0.5,
+            "sigma": 0.5
         }
     },
     "mesh": {

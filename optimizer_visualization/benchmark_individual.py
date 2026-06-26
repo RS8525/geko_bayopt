@@ -53,23 +53,36 @@ def make_individual_figure(
     ys1: list[float],
     xs2: list[tuple[float, float]],
     ys2: list[float],
+    mask1: list[bool] | None = None,
+    mask2: list[bool] | None = None,
+    n_particles: int | None = None,
 ) -> Path:
-    """Create and save one side-by-side figure; return the output path."""
+    """Create and save one side-by-side figure; return the output path.
+
+    Pass *n_particles* for PSO: dots are coloured by particle, and the
+    sequential evaluation-order colorbar is omitted.
+    """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.2))
 
     # --- super-title: optimizer name only -----------------------------------
     fig.suptitle(name, fontsize=12, fontweight="bold", y=1.01)
 
     # --- 1-D subplot ---------------------------------------------------------
-    plot_1d_ax(ax1, xs1, ys1, phase_split=phase_split_1d)
+    plot_1d_ax(ax1, xs1, ys1, phase_split=phase_split_1d, step_mask=mask1,
+               n_particles=n_particles)
 
     # --- 2-D subplot ---------------------------------------------------------
-    plot_2d_ax(ax2, xs2, ys2, phase_split=phase_split_2d)
+    plot_2d_ax(ax2, xs2, ys2, phase_split=phase_split_2d, step_mask=mask2,
+               n_particles=n_particles)
 
-    # --- shared colorbar and layout -----------------------------------------
-    plt.subplots_adjust(left=0.07, right=0.90, wspace=0.30,
-                        top=0.92, bottom=0.13)
-    _add_colorbar(fig)
+    # --- layout + optional colorbar -----------------------------------------
+    if n_particles is None:
+        plt.subplots_adjust(left=0.07, right=0.90, wspace=0.30,
+                            top=0.92, bottom=0.13)
+        _add_colorbar(fig)
+    else:
+        plt.subplots_adjust(left=0.07, right=0.96, wspace=0.30,
+                            top=0.92, bottom=0.13)
 
     # --- legend key at the bottom -------------------------------------------
     fig.text(
@@ -92,10 +105,17 @@ def main() -> None:
         label_safe = name.split("  (")[0].replace("→", "->").replace("–", "-")
         print(f"  [{idx + 1}/{n_opt}]  {label_safe} ...", flush=True)
 
-        xs1, ys1 = run_1d(sec1d)
-        xs2, ys2 = run_2d(sec2d)
+        xs1, ys1, mask1 = run_1d(sec1d)
+        xs2, ys2, mask2 = run_2d(sec2d)
 
-        out = make_individual_figure(name, slug, ps1, ps2, xs1, ys1, xs2, ys2)
+        # PSO: colour dots by particle index instead of evaluation order
+        n_particles = (
+            sec1d.kind_specific_options.get("n_particles")
+            if sec1d.kind == "pso" else None
+        )
+
+        out = make_individual_figure(name, slug, ps1, ps2, xs1, ys1, xs2, ys2,
+                                     mask1, mask2, n_particles=n_particles)
         print(f"          saved -> {out.name}", flush=True)
 
     print(f"\nAll {n_opt} figures saved in  {_PLOTS}")

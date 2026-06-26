@@ -1,5 +1,5 @@
 {
-    "experiment_id": "FD_1D_2800",
+    "experiment_id": "FD_1D_ph2800",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -22,28 +22,28 @@
         {"name": "geko_csep", "low": 0.7, "high": 2.5}
     ],
     "objective": {
-    "kind": "gedcp",
-    "options": {
-        "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
-        "integral_weights": {},
-        "lambda_field": 1.0,
-        "lambda_integral": 0.0,
-        "lambda_preference": 0.5
+        "kind": "gedcp",
+        "options": {
+            "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
+            "integral_weights": {},
+            "lambda_field": 1.0,
+            "lambda_integral": 0.0,
+            "lambda_preference": 0.5
         }
     },
     "optimizer": {
-    "kind": "finite_differences",
-    "stopping_criteria": {
-        "n_calls": 20,
-        "epsilon": 1e-4,
-        "window": 3
-    },
-    "kind_specific_options": {
-        "step_size": 0.05,
-        "learning_rate": 0.2,
-        "min_step": 1e-5,
-        "max_step": 0.25
-    }
+        "kind": "finite_differences",
+        "stopping_criteria": {
+            "n_calls": 20,
+            "epsilon": 1e-4,
+            "window": 3
+        },
+        "kind_specific_options": {
+            "step_size": 0.05,
+            "learning_rate": 0.075,
+            "min_step": 1e-5,
+            "max_step": 0.25
+        }
     },
     "mesh": {
         "length_unit": "mm",
