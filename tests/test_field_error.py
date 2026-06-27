@@ -153,12 +153,57 @@ def test_field_error_common_grid_identical_data() -> None:
 
     assert np.isclose(err, 0.0)
 
+
+def test_field_error_default_matches_l2_norm() -> None:
+    dns_coords = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    dns_fields = {"Ux": np.array([0.0, 0.0, 2.0, 2.0])}
+    residual = np.array([0.0, 1.0, 2.0, 3.0])
+    sim_fields = {"Ux": dns_fields["Ux"] - residual}
+
+    default_calc = FieldErrorCalculator(dns_coords, dns_fields)
+    l2_calc = FieldErrorCalculator(
+        dns_coords,
+        dns_fields,
+        field_error_norm="l2",
+    )
+
+    default_err = default_calc.calculate_error(dns_coords, sim_fields, field_name="Ux")
+    l2_err = l2_calc.calculate_error(dns_coords, sim_fields, field_name="Ux")
+
+    assert np.isclose(default_err, np.sqrt(3.5))
+    assert np.isclose(default_err, l2_err)
+
+
+def test_field_error_l1_norm_uses_dns_std_normalization() -> None:
+    dns_coords = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    dns_fields = {"Ux": np.array([0.0, 0.0, 2.0, 2.0])}
+    residual = np.array([0.0, 1.0, 2.0, 3.0])
+    sim_fields = {"Ux": dns_fields["Ux"] - residual}
+
+    calc = FieldErrorCalculator(
+        dns_coords,
+        dns_fields,
+        field_error_norm="l1",
+    )
+    err = calc.calculate_error(dns_coords, sim_fields, field_name="Ux")
+
+    assert np.isclose(err, 1.5)
+
+
+def test_field_error_rejects_invalid_norm_options() -> None:
+    dns_coords = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    dns_fields = {"Ux": np.array([0.0, 0.0, 2.0, 2.0])}
+
+    with pytest.raises(ValueError, match="field_error_norm"):
+        FieldErrorCalculator(dns_coords, dns_fields, field_error_norm="linf")
+
+
 def test_field_error_constant_offset() -> float:
     """
-    Test that a uniform offset in values produces the mathematically expected MSE.
+    Test that a uniform cp offset is removed by the pressure re-gauge.
     
-    By shifting the target cp output uniformly by an arbitrary amount, we test whether 
-    MSE correctly performs (`sum((1+c) - 1)**2 / N`), which explicitly simplifies to `c**2`.
+    The pressure coefficient has an arbitrary datum, so both DNS and simulation
+    are compared after area-weighted zero-mean re-gauging.
     """
     # Initialize basic domain definition
     dns_coords = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
@@ -173,7 +218,7 @@ def test_field_error_constant_offset() -> float:
     
     # Check evaluated accuracy against arithmetic constraint
     mse = calc.calculate_error(sim_coords, sim_fields, field_name="cp")
-    assert np.isclose(mse, offset**2)
+    assert np.isclose(mse, 0.0)
     return mse
 
 if __name__ == "__main__":

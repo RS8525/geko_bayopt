@@ -1,7 +1,7 @@
 """
-Weighted multi-field MSE loss.
+Weighted multi-field normalized field-error loss.
 
-Sums per-field MSEs with user-supplied weights. Lets you tune the trade-off
+Sums per-field errors with user-supplied weights. Lets you tune the trade-off
 between matching different quantities (pressure vs velocity, x vs y) without
 changing code.
 """
@@ -19,8 +19,9 @@ def weighted_multi_field(
     dns_fields: dict[str, np.ndarray],
     *,
     field_weights: dict[str, float],
+    field_error_norm: str = "l2",
 ) -> LossFn:
-    """Build a weighted sum of per-field MSEs.
+    """Build a weighted sum of per-field errors.
 
     Parameters
     ----------
@@ -31,12 +32,14 @@ def weighted_multi_field(
         both DNS and simulation outputs. Example::
 
             {"cp": 1.0, "Ux": 0.5, "Uy": 0.5}
+    field_error_norm
+        Field-error norm: ``"l2"`` (default) or ``"l1"``.
 
     Returns
     -------
     LossFn
         Callable ``run_result -> float`` returning the weighted sum of
-        per-field MSEs.
+        per-field errors.
 
     Raises
     ------
@@ -59,13 +62,17 @@ def weighted_multi_field(
             f"Available: {sorted(dns_fields.keys())}"
         )
 
-    calc = FieldErrorCalculator(dns_coords, dns_fields)
+    calc = FieldErrorCalculator(
+        dns_coords,
+        dns_fields,
+        field_error_norm=field_error_norm,
+    )
 
     def loss(run) -> float:
         total = 0.0
         for field, weight in field_weights.items():
-            mse = calc.calculate_error(run.grid_coords, run.fields, field_name=field)
-            total += weight * mse
+            err = calc.calculate_error(run.grid_coords, run.fields, field_name=field)
+            total += weight * err
         return total
 
     return loss

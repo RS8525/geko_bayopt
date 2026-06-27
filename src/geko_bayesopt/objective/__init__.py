@@ -2,7 +2,7 @@
 Loss-function registry.
 
 Three building blocks live in separate modules:
-    - ``field_error.py`` -> ``FieldErrorCalculator`` (interpolated MSE)
+    - ``field_error.py`` -> ``FieldErrorCalculator`` (interpolated field error)
     - ``integral_error.py`` -> ``IntegralErrorCalculator`` + extractors
     - ``GEDCP.py`` -> pure scalar math (gedcp, coefficient_preference)
 
@@ -11,9 +11,9 @@ factory returns a ``LossFn`` (callable: RunResult -> float) the BO loop
 can use without knowing the internals.
 
 Registered loss kinds:
-    - "mse_cp"               -- single-field MSE (default cp)
-    - "mse_field"            -- single-field MSE, configurable field
-    - "weighted_multi_field" -- weighted sum of per-field MSE
+    - "mse_cp"               -- single-field normalized field error (default cp)
+    - "mse_field"            -- single-field normalized field error
+    - "weighted_multi_field" -- weighted sum of per-field errors
     - "gedcp"                -- field + integral + default-coef preference
 
 Add a new loss by:
@@ -61,12 +61,13 @@ def objective_geko(
     common_grid_nx: int = 360,
     common_grid_ny: int = 120,
     common_grid_floor: str | None = None,
+    field_error_norm: str = "l2",
 ) -> LossFn:
     """Build the full GEDCP objective for the BO loop.
 
     Per trial this:
 
-    1. Computes a field error E_F = sum over ``field_names`` of MSE
+    1. Computes a field error E_F = sum over ``field_names`` of normalized error
        between simulation and DNS (interpolated to the DNS grid).
     2. Computes an integral error E_I = weighted relative-squared-error
        sum over ``integral_weights``. Zero if no weights given.
@@ -94,6 +95,8 @@ def objective_geko(
     defaults
         Override Fluent's default GEKO coefficients for the preference
         penalty. Defaults to ``GEDCP.GEKO_DEFAULTS``.
+    field_error_norm
+        Field-error norm: ``"l2"`` (default) or ``"l1"``.
 
     Example JSON::
 
@@ -130,6 +133,7 @@ def objective_geko(
         common_grid_nx=common_grid_nx,
         common_grid_ny=common_grid_ny,
         common_grid_floor=common_grid_floor,
+        field_error_norm=field_error_norm,
     )
     pref_defaults = defaults if defaults is not None else GEKO_DEFAULTS
 
@@ -145,7 +149,7 @@ def objective_geko(
             ref_integrals[name] = _BUILTIN_EXTRACTORS[name](dns_coords, dns_fields)
 
     def loss(run: RunResult) -> float:
-        # 1. Field error: sum of MSE over each named field.
+        # 1. Field error: sum of normalized errors over each named field.
         e_field = 0.0
         for fname in field_names:
             e_field += field_calc.calculate_error(

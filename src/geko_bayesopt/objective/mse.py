@@ -1,8 +1,8 @@
 """
-Single-field MSE loss.
+Single-field normalized field-error loss.
 
-Computes mean squared error between simulation and DNS for one field
-(default: cp), optionally scaled by a global weight.
+Computes an area-weighted, DNS-std-normalized error between simulation
+and DNS for one field (default: cp), optionally scaled by a global weight.
 """
 
 from __future__ import annotations
@@ -19,29 +19,36 @@ def mse_field(
     *,
     field: str = "cp",
     weight: float = 1.0,
+    field_error_norm: str = "l2",
 ) -> LossFn:
-    """Build an MSE loss on a single field.
+    """Build a normalized field-error loss on a single field.
 
     Parameters
     ----------
     dns_coords, dns_fields
         DNS reference data, as returned by ``FlowCase.load_dns``.
     field
-        Which field to compute MSE on. Must be present in both DNS
+        Which field to compare. Must be present in both DNS
         and simulation outputs.
     weight
-        Scalar multiplier applied to the MSE. Default 1.0.
+        Scalar multiplier applied to the field error. Default 1.0.
+    field_error_norm
+        Field-error norm: ``"l2"`` (default) or ``"l1"``.
 
     Returns
     -------
     LossFn
         Callable ``run_result -> float``.
     """
-    calc = FieldErrorCalculator(dns_coords, dns_fields)
+    calc = FieldErrorCalculator(
+        dns_coords,
+        dns_fields,
+        field_error_norm=field_error_norm,
+    )
 
     def loss(run) -> float:
-        mse = calc.calculate_error(run.grid_coords, run.fields, field_name=field)
-        return weight * mse
+        err = calc.calculate_error(run.grid_coords, run.fields, field_name=field)
+        return weight * err
 
     return loss
 
@@ -52,6 +59,13 @@ def mse_cp(
     dns_fields: dict[str, np.ndarray],
     *,
     weight: float = 1.0,
+    field_error_norm: str = "l2",
 ) -> LossFn:
-    """MSE on pressure coefficient. Shorthand for ``mse_field(field='cp')``."""
-    return mse_field(dns_coords, dns_fields, field="cp", weight=weight)
+    """Pressure-coefficient field error. Shorthand for ``mse_field(field='cp')``."""
+    return mse_field(
+        dns_coords,
+        dns_fields,
+        field="cp",
+        weight=weight,
+        field_error_norm=field_error_norm,
+    )

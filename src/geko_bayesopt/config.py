@@ -23,7 +23,7 @@ Example minimal config::
         ],
         "objective": {
             "kind": "mse_cp",
-            "options": {"field": "cp", "weight": 1.0}
+            "options": {"weight": 1.0, "field_error_norm": "l2"}
         },
         "optimizer": {
             "kind": "skopt_gp",
@@ -78,6 +78,8 @@ class ObjectiveSection(BaseModel):
 
     ``kind`` matches an entry in ``objective/__init__.py``'s dispatcher.
     ``options`` is passed to the loss factory as keyword arguments.
+    Field-error objectives accept ``field_error_norm`` (``"l2"`` default
+    or ``"l1"``).
     """
     kind: Literal[
         "mse_cp",

@@ -92,6 +92,11 @@ The flow case is responsible for declaring `hill_height` and the case's derived 
 
 For unstructured FFS LES/RANS comparisons, prefer `objective.options.evaluation_mode = "common_grid"` with `common_grid_floor = "ffs_step"` so DNS and simulation are evaluated on the same physical grid. If evaluating directly on DNS points, `area_weight_mode` should be `"density"` rather than the periodic-hill structured-grid formula.
 
+Field-error objectives accept `objective.options.field_error_norm`. The default
+`"l2"` is the historical area-weighted RMSE divided by DNS weighted standard
+deviation. `"l1"` uses the area-weighted mean absolute residual divided by the
+same DNS weighted standard deviation.
+
 ---
 
 ## File layout convention
@@ -266,5 +271,5 @@ These are baked into `fluent/`:
 - All final FFS runs require continuity, velocity, `k`, and `omega` residuals
   to reach `1e-6`.
 - The objective uses `Ux` and `total-turbulent-kinetic-energy` on a 360x120 common grid with the FFS step masked out.
-- The final GEDCP configurations use `lambda_preference = 0.5`. Each field contribution is its common-grid RMSE divided by the common-grid DNS standard deviation; the field contributions are summed and then multiplied by the GEKO default-coefficient preference factor.
+- The final GEDCP configurations use `lambda_preference = 0.5`. Each field contribution defaults to common-grid RMSE divided by the common-grid DNS standard deviation; `field_error_norm` can switch this to L1 field error. The field contributions are summed and then multiplied by the GEKO default-coefficient preference factor.
 - Historical FFS configs live under `configs/ffs_retired/` and are not production inputs.

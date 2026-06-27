@@ -1,7 +1,7 @@
 {
   "name": "ffs_re4000_optimal",
   "simulation": {
-    "path": "results\\fluent\\ffs_re4000_csep_cnw_final\\ffs_Reh4000_Csep0.8478_Cnw0.5075.ascii",
+    "path": "results\\fluent\\ffs_re4000_csep_cnw_final\\ffs_Reh4000_Csep0.8527_Cnw0.5013.ascii",
     "x_column": "x-coordinate",
     "y_column": "y-coordinate",
     "fields": {

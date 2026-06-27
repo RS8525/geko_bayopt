@@ -1,7 +1,7 @@
 """
 Field-level error between DNS reference and RANS simulation.
 
-Computes a scale-aware, area-weighted error norm so different fields
+Computes a scale-aware, area-weighted field error so different fields
 (cp, Ux, Uy, ...) can be summed without one dominating by scale, and
 without dense-grid regions dominating by node count.
 
@@ -21,17 +21,20 @@ Two refinements over a naive point-mean MSE:
    whole comparison happens on the DNS grid, the simulation's boundary-
    layer clustering never biases the result.
 
-The per-field error is::
+The default per-field error is the weighted L2 norm::
 
-    error = wmean( |dns - sim| ) / wstd(dns)
+    error = sqrt(wmean((dns - sim)^2)) / wstd(dns)
 
-where ``wmean`` / ``wstd`` are area-weighted. For cp, both DNS and the
+where ``wmean`` / ``wstd`` are area-weighted. The norm can also be
+configured as weighted L1. For cp, both DNS and the
 interpolated simulation are re-gauged to an area-weighted zero mean on
 the masked common grid before the error is taken, so the pressure datum
 is identical on both sides.
 """
 
 from __future__ import annotations
+
+from typing import Literal
 
 import numpy as np
 from scipy.interpolate import griddata
@@ -47,6 +50,8 @@ from scipy.spatial import cKDTree
 
 _HILL_H_MM = 28.0          # reference hill height in the polynomial definition
 _HILL_HALF_MM = 54.0       # left hill extends from x=0 to x=54 mm (= 1.929 H)
+FieldErrorNorm = Literal["l1", "l2"]
+_VALID_FIELD_ERROR_NORMS = {"l1", "l2"}
 
 
 def _hill_left_mm(x_mm: float) -> float:
@@ -150,6 +155,8 @@ class FieldErrorCalculator:
         surface from all statistics in the periodic hills example.
     domain_length : float
         Streamwise domain length in H units (default 9.0).
+    field_error_norm : {"l1", "l2"}
+        Field-error norm. Default ``"l2"`` preserves the historical behavior.
     """
 
     def __init__(
@@ -164,6 +171,7 @@ class FieldErrorCalculator:
         common_grid_nx: int = 360,
         common_grid_ny: int = 120,
         common_grid_floor: str | None = None,
+        field_error_norm: FieldErrorNorm = "l2",
     ):
         self.dns_coords = dns_coords
         self.dns_fields = dns_fields
@@ -173,6 +181,12 @@ class FieldErrorCalculator:
         if evaluation_mode not in {"dns_points", "common_grid"}:
             raise ValueError("evaluation_mode must be 'dns_points' or 'common_grid'.")
         self.evaluation_mode = evaluation_mode
+
+        if field_error_norm not in _VALID_FIELD_ERROR_NORMS:
+            raise ValueError(
+                "field_error_norm must be either 'l1' or 'l2'."
+            )
+        self.field_error_norm = field_error_norm
 
         # Geometric mask: keep points at or above the hill surface.
         if mask_hill:
@@ -261,19 +275,12 @@ class FieldErrorCalculator:
         if field_name == "cp":
             sim_v = sim_v - _wmean(sim_v, w)
 
-        """Uncomment this part if you want to use the 1-norm"""
-        # mae = _wmean(np.abs(dns_v - sim_v), w)
-        # normalized = mae / self._dns_std[field_name]
-
-        """Comment the lines to use another norm (weighted 2-norm is used bellow)"""
-        # 1. Square the differences instead of taking the absolute value
-        squared_diff = (dns_v - sim_v) ** 2
-        
-        # 2. Compute the weighted Mean Squared Error Weighted (MSEW)
-        mse = _wmean(squared_diff, w)
-        
-        # 3. Take the square root to yield the 2-norm (RMSEW)
-        normalized = np.sqrt(mse)/ self._dns_std[field_name]
+        normalized = _normalized_field_error(
+            dns_v - sim_v,
+            w,
+            self._dns_std[field_name],
+            norm=self.field_error_norm,
+        )
 
         return float(self.field_weights.get(field_name, 1.0) * normalized)
 
@@ -329,6 +336,24 @@ def _area_weights(coords: np.ndarray, mode: str) -> np.ndarray:
     raise ValueError(
         "area_weight_mode must be one of 'auto', 'structured', 'density', or 'uniform'."
     )
+
+
+def _normalized_field_error(
+    residual: np.ndarray,
+    weights: np.ndarray,
+    dns_std: float,
+    *,
+    norm: FieldErrorNorm,
+) -> float:
+    """Return a weighted field error in DNS-standard-deviation units."""
+
+    r = residual / dns_std
+    if norm == "l1":
+        return _wmean(np.abs(r), weights)
+    if norm == "l2":
+        return float(np.sqrt(_wmean(r**2, weights)))
+
+    raise ValueError("norm must be either 'l1' or 'l2'.")
 
 
 def _ffs_step_floor(x: np.ndarray) -> np.ndarray:
