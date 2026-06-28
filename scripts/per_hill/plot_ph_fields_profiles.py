@@ -298,7 +298,7 @@ def save_comparison_list(
     vmin=None,
     vmax=None,
 ):
-    """Make one combined image from old-style individual plots."""
+    
     if vmin is None:
         vmin = min(ref[field].min(), sim[field].min())
     if vmax is None:
@@ -340,9 +340,6 @@ def save_comparison_list(
         stitch_images(image_paths, output_path, layout=layout)
 
 
-# ---------------------------------------------------------------------------
-# OLD profile code style, with optional Default added
-# ---------------------------------------------------------------------------
 
 def _repo_path(path: str | Path) -> Path:
     path = Path(path)
@@ -362,18 +359,6 @@ def _col(df: pd.DataFrame, col):
 def load_profile_data(sim_cfg: dict, dns_cfg: dict, default_cfg: dict | None = None):
     sim = _read_table(_repo_path(sim_cfg["path"]))
     dns = _read_table(_repo_path(dns_cfg["path"]))
-
-    # Keep exactly the old derived DNS turbulent-viscosity calculation when
-    # the required columns exist.
-    if {"k", "dissipation", "density"}.issubset(dns.columns):
-        k = dns["k"].to_numpy()
-        eps = dns["dissipation"].to_numpy()
-        rho = dns["density"].to_numpy()
-
-        eps_safe = np.where(eps > 1e-12, eps, np.nan)
-
-        dns["viscosity-turb"] = rho * 0.09 * k**2 / eps_safe
-
     default = None
     if default_cfg is not None:
         default = _read_table(_repo_path(default_cfg["path"]))
