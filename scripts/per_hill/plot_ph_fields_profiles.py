@@ -1,5 +1,9 @@
 """Periodic-hill plotting script for DNS, optimized simulation, and optional GEKO default comparison.
 
+Run from the repository root and pass the plotting config explicitly:
+
+     python scripts/per_hill/plot_ph_fields_profiles.py scripts/per_hill/plots/<config-name>.json
+
 This script is controlled by an external JSON configuration file. The JSON defines
 the case name, the simulation file, the DNS file, the column indices for x, y, and
 each plotted field, as well as the plotting options.
@@ -42,7 +46,7 @@ Ex.
     }
   },
   "dns": {
-    "path": "data/dns/periodic_hills/dns_avg_Re2800_columnwise_organized.ascii",
+    "path": "data/dns/periodic_hills/pehill-2800-Re-DNS/dns_avg_Re2800_columnwise_organized.ascii",
     "x": 1,
     "y": 2,
     "fields": {
@@ -107,9 +111,6 @@ DEFAULT_SOLUTION_PATH = os.path.join(
 )
 
 
-# ---------------------------------------------------------------------------
-# OLD field-plot code, kept intentionally
-# ---------------------------------------------------------------------------
 
 def repo_path(path):
     return path if os.path.isabs(path) else os.path.join(REPO_ROOT, path)
@@ -239,7 +240,7 @@ def save_error_plot(ref_label, ref, sim, field, filepath):
         sim["x"],
         sim["y"],
         error,
-        title=f"Error simulation - {ref_label} {field}",
+        title=f"{ref_label} {field}",
         label=f"{field} difference",
         filepath=filepath,
         cmap="coolwarm",
@@ -288,15 +289,20 @@ def save_comparison_list(
     case_name,
     field,
     ref_label,
+    sim_label,
     ref,
     sim,
     output_path,
     include_error=True,
     layout="horizontal",
+    vmin=None,
+    vmax=None,
 ):
     """Make one combined image from old-style individual plots."""
-    vmin = min(ref[field].min(), sim[field].min())
-    vmax = max(ref[field].max(), sim[field].max())
+    if vmin is None:
+        vmin = min(ref[field].min(), sim[field].min())
+    if vmax is None:
+        vmax = max(ref[field].max(), sim[field].max())
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -305,7 +311,7 @@ def save_comparison_list(
         ref_path = tmp / f"01_{ref_label}_{field}.png"
         save_field_plot(
             ref["x"], ref["y"], ref[field],
-            title=f"{ref_label} {field} — {case_name}",
+            title=f"DNS {field}",
             label=field,
             filepath=ref_path,
             cmap="viridis",
@@ -317,7 +323,7 @@ def save_comparison_list(
         sim_path = tmp / f"02_simulation_{field}.png"
         save_field_plot(
             sim["x"], sim["y"], sim[field],
-            title=f"Simulation {field}",
+            title=f"{sim_label} {field}",
             label=field,
             filepath=sim_path,
             cmap="viridis",
@@ -328,7 +334,7 @@ def save_comparison_list(
 
         if include_error:
             err_path = tmp / f"03_error_{field}.png"
-            save_error_plot(ref_label, ref, sim, field, err_path)
+            save_error_plot(f"Error {sim_label} - DNS", ref, sim, field, err_path)
             image_paths.append(err_path)
 
         stitch_images(image_paths, output_path, layout=layout)
@@ -511,11 +517,12 @@ def main():
     default = load_sim_data(default_cfg) if compare_default else None
 
     for field in fields:
-        compare_path = output_directory / f"compare_{cfg['name']}_{field}.png"
+        compare_path = output_directory / f"Sim_DNS_{cfg['name']}_{field}.png"
         save_comparison_list(
             case_name=cfg["name"],
             field=field,
             ref_label="DNS",
+            sim_label="Simulation",
             ref=dns,
             sim=sim,
             output_path=compare_path,
@@ -525,13 +532,14 @@ def main():
         print(f"Saved: {compare_path}")
 
         if compare_default:
-            compare_default_path = output_directory / f"compare_default_{cfg['name']}_{field}.png"
+            compare_default_path = output_directory / f"Default_DNS_{cfg['name']}_{field}.png"
             save_comparison_list(
                 case_name=cfg["name"],
                 field=field,
-                ref_label="Default",
-                ref=default,
-                sim=sim,
+                ref_label="DNS",
+                sim_label="Default",
+                ref=dns,
+                sim=default,
                 output_path=compare_default_path,
                 include_error=include_error,
                 layout=layout,
