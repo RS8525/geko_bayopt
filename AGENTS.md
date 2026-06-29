@@ -115,10 +115,19 @@ The repository separates *inputs* (things you provide) from *outputs* (things th
 
 Both `geometry_path` and `dns_path` in the experiment JSON are resolved relative to the repo root when they're not absolute. The repo root is auto-detected as the grandparent of the config file (`<root>/configs/<name>.json` → `<root>`).
 
-FFS production configs are one level below `configs/`, under
-`configs/ffs_final/`. Because the runner still uses the config grandparent,
-their input paths intentionally start with `../data/`. Run these configs from
-the repository root so explicit result paths resolve under `<repo>/results/`.
+FFS production configs live below `configs/ffs_final/`, split into
+`2_param/` and `all_param/`. Because the runner still uses the config
+grandparent as the inferred repo root, nested configs must point back to the
+real input tree with `../../data/...` paths. Run these configs from the
+repository root so explicit result paths resolve under `<repo>/results/`.
+Completed final FFS result bundles are consolidated under
+`results/ffs_final_runs/`, split into `all_param_runs/<experiment_id>/` and
+`two-param-runs/<experiment_id>/`. In those bundles, `fluent_work_dir` and
+`results_dir` intentionally point to the same folder so the retained final
+ASCII, default ASCII, solved `.cas.h5`/`.dat.h5`, `metadata.csv`, and
+`optimizer.pkl` stay together. The unfinished `ffs_re6000_all_param_mae_final`
+run still uses the historical split between `results/fluent/` and
+`results/experiments/` until it completes.
 
 ---
 
@@ -235,9 +244,15 @@ These are baked into `fluent/`:
 
 - `scripts/ffs/plot_ffs_fields.py` is a standalone plotting helper for FFS DNS/simulation data.
 - Configuration lives in `scripts/ffs/plots/*.json`; final-run reusable configs live in `scripts/ffs/plots/final/*.json`. Figures are written to `scripts/ffs/plots/<config-name>/`.
+- Plot configs may set a repo-root-relative `output_dir`; final-run configs write plots into each run bundle below `results/ffs_final_runs/.../plots/`.
 - Simulation and DNS columns are selected by exported header strings; legacy numeric simulation indices are still accepted.
+- Normalized-error plots use the common-grid objective path and can report both L1 and L2 field contributions via `plots.normalized_error.norms`.
+- Fixed normalized-error color scales are configured with `plots.normalized_error.error_limits`, either globally or per field/pair, so default-GEKO and optimized-GEKO plots can be compared directly.
+- `scripts/ffs/plot_metadata_convergence.py` plots optimizer metadata convergence. Final metadata configs live in `scripts/ffs/plots/final_metadata/`.
+- Metadata convergence configs can use `score_as` to benchmark 2-parameter runs under the matching all-parameter GEDCP preference convention. This relies on final FFS objectives having `lambda_integral = 0`, recovering field error from the stored score, then reapplying the target preference term with missing GEKO coefficients filled by defaults.
+- Final metadata configs also include standalone 2-parameter convergence plots where the default-GEKO metadata row is drawn as the baseline.
 - It does not participate in the main `src/geko_bayesopt` config flow.
-- Tracked reusable configs cover the generic example, the Re=4000 and Re=6000 default-GEKO baselines, and the retained Re=4000 optimum. Other local working configs and generated figures stay ignored.
+- Tracked reusable configs cover the generic example plus default-GEKO and optimized-GEKO plots for every completed final FFS run. Other local working configs and generated figures stay ignored unless they are intentionally published.
 - Keep each JSON config in sync with the specific DNS and simulation exports you want to inspect.
 
 ## FFS DNS conversion helper
@@ -265,9 +280,11 @@ These are baked into `fluent/`:
 
 ## Final FFS optimization configs
 
-- `configs/ffs_final/` contains one C_SEP/C_NW Bayesian optimization config for each of Re=2000, 3000, 4000, and 6000.
+- `configs/ffs_final/2_param/` contains one C_SEP/C_NW Bayesian optimization config for each of Re=2000, 3000, 4000, and 6000.
+- `configs/ffs_final/all_param/` contains matching all-parameter configs named `ffs_re*_all_param*.json`; they optimize `geko_csep`, `geko_cnw`, `geko_cjet`, `geko_cturb`, and `geko_cmix`.
+- Completed final FFS run artifacts live in `results/ffs_final_runs/all_param_runs/` and `results/ffs_final_runs/two-param-runs/`, one directory per `experiment_id`. `ffs_re6000_all_param_mae_final` is excluded from that publication bundle until it completes.
 - Each config hardcodes a unique `base_case_name`, DNS reference, fluid viscosity, inlet turbulence intensity, and inlet viscosity ratio.
-- Each run performs 48 evaluations: 16 Sobol initial points and 32 GP-guided proposals. Epsilon early stopping is disabled so every case receives the full budget.
+- The 2-parameter runs perform 48 evaluations: 16 Sobol initial points and 32 GP-guided proposals. The all-parameter runs perform 100 evaluations: 32 Sobol initial points and 68 GP-guided proposals. Epsilon early stopping is disabled so every case receives the full budget.
 - All final FFS runs require continuity, velocity, `k`, and `omega` residuals
   to reach `1e-6`.
 - The objective uses `Ux` and `total-turbulent-kinetic-energy` on a 360x120 common grid with the FFS step masked out.

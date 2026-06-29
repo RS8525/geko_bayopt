@@ -61,12 +61,17 @@ error_calcs.py
 
 #results
 results/
+!results/
+results/*
+!results/ffs_final_runs/
+!results/ffs_final_runs/**
 data/dns/ffs/*.csv
 
 # FFS plot configs and generated plots
 scripts/ffs/plots/*
 !scripts/ffs/plots/ffs_default.json
 !scripts/ffs/plots/final/
+!scripts/ffs/plots/final_metadata/
 
 
 # Legacy local plot outputs from the previous helper location

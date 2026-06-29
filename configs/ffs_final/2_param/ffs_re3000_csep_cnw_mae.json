@@ -1,37 +1,49 @@
 {
-  "experiment_id": "ffs_re2000_csep_cnw_final",
+  "experiment_id": "ffs_re3000_csep_cnw_final_mae",
   "case": {
     "kind": "ffs",
     "options": {
-      "base_case_name": "ffs_Reh2000",
-      "step_height": 10.0,
+      "base_case_name": "ffs_Reh3000",
+      "step_height": 10,
       "fluid_density": 854.5648,
-      "fluid_viscosity": 0.04272825,
-      "inlet_velocity": 10.0,
-      "turb_intensity": 3.4,
-      "re_h": 2000,
-      "turb_viscosity_ratio": 9.0,
+      "fluid_viscosity": 0.02848549,
+      "inlet_velocity": 10,
+      "turb_intensity": 3.5,
+      "re_h": 3000,
+      "turb_viscosity_ratio": 11,
       "iter_count": 500,
       "zone_inlet": "inlet",
       "zone_outlet": "outlet",
-      "outlet_static_pressure": 0.0,
+      "outlet_static_pressure": 0,
       "zone_top": "ceiling",
       "zone_bottom": "step",
-      "geometry_path": "../data/geometry/ffs/FFS_3_2d_v2.dsco",
-      "dns_path": "../data/dns/ffs/FFS_Reh2000_SBES_Node_2D.csv"
+      "geometry_path": "../../data/geometry/ffs/FFS_3_2d_v2.dsco",
+      "dns_path": "../../data/dns/ffs/FFS_Reh3000_SBES_Node_2D.csv"
     }
   },
   "parameters": [
-    {"name": "geko_csep", "low": 0.5, "high": 2.5},
-    {"name": "geko_cnw", "low": -2.0, "high": 2.0}
+    {
+      "name": "geko_csep",
+      "low": 0.7,
+      "high": 2.5
+    },
+    {
+      "name": "geko_cnw",
+      "low": -2,
+      "high": 2
+    }
   ],
   "objective": {
     "kind": "gedcp",
     "options": {
-      "field_names": ["Ux", "total-turbulent-kinetic-energy"],
+      "field_names": [
+        "Ux",
+        "total-turbulent-kinetic-energy"
+      ],
+      "field_error_norm": "l1",
       "integral_weights": {},
-      "lambda_field": 1.0,
-      "lambda_integral": 0.0,
+      "lambda_field": 1,
+      "lambda_integral": 0,
       "lambda_preference": 0.5,
       "mask_hill": false,
       "evaluation_mode": "common_grid",
@@ -49,7 +61,7 @@
     },
     "kind_specific_options": {
       "n_initial": 16,
-      "random_state": 2000
+      "random_state": 3000
     }
   },
   "mesh": {
@@ -72,8 +84,8 @@
     "k": 0.000001,
     "omega": 0.000001
   },
-  "fluent_work_dir": "results/fluent/ffs_re2000_csep_cnw_final",
-  "results_dir": "results/experiments/ffs_re2000_csep_cnw_final",
+  "fluent_work_dir": "results/ffs_final_runs/two-param-runs/ffs_re3000_csep_cnw_final_mae",
+  "results_dir": "results/ffs_final_runs/two-param-runs/ffs_re3000_csep_cnw_final_mae",
   "session_strategy": "live",
   "keep_only_best_case_files": true
 }
