@@ -1,0 +1,18 @@
+{
+  "name": "ffs_re4000_two_param_convergence",
+  "title": "Re=4000 Two-Parameter Convergence",
+  "output_dir": "results/ffs_final_runs/two-param-runs/ffs_re4000_csep_cnw_final/plots/metadata",
+  "output_name": "metadata_convergence_log.png",
+  "y_scale": "log",
+  "y_label": "GEDCP score",
+  "plot_raw_scores": true,
+  "plot_best_so_far": true,
+  "plot_baseline": true,
+  "runs": [
+    {
+      "label": "2-param",
+      "metadata": "results/ffs_final_runs/two-param-runs/ffs_re4000_csep_cnw_final/metadata.csv",
+      "config": "configs/ffs_final/2_param/ffs_re4000_csep_cnw.json"
+    }
+  ]
+}

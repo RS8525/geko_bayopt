@@ -14,13 +14,15 @@ Configuration is stored outside this script. Each config file defines:
 - which simulation/DNS field pairs to compare
 - optional ``plots.normalized_error`` common-grid settings and the subset of
   comparison aliases that contribute to the field-only objective
-- the output folder name, which is used under ``scripts/ffs/plots/<name>/``
+- optional root-relative ``output_dir``. Without it, the output folder name is
+  used under ``scripts/ffs/plots/<name>/``
 
 For comparison plots, DNS values are interpolated onto the simulation grid
 before the difference is computed. Normalized-error plots instead interpolate
 both datasets to the objective's common grid and show
-``(simulation - DNS) / std(DNS)``. Their reported contribution is the
-normalized RMSE used by the field objective, excluding parameter preference.
+``(simulation - DNS) / std(DNS)``. Their reported contribution can be either
+the normalized L1 or L2 field error used by the field objective, excluding
+parameter preference.
 """
 
 from __future__ import annotations
@@ -43,6 +45,7 @@ from scipy.spatial import cKDTree
 from geko_bayesopt.objective.field_error import (
     _common_grid,
     _idw_interpolate,
+    _normalized_field_error,
     _wstd,
 )
 
@@ -339,6 +342,57 @@ def _plot_comparison(
     print(f"{sim_name} vs {dns_name}: RMSE={rmse:.6g}, MAE={mae:.6g}")
 
 
+def _fixed_limit_from_spec(
+    spec: object,
+    *,
+    sim_name: str,
+    dns_name: str,
+) -> tuple[float, float] | None:
+    """Resolve a configured fixed color scale for an error plot."""
+
+    if spec is None:
+        return None
+
+    if isinstance(spec, (int, float)):
+        limit = abs(float(spec))
+        return (-limit, limit)
+
+    if isinstance(spec, list):
+        if len(spec) != 2:
+            raise ValueError("Error-limit lists must contain exactly [vmin, vmax].")
+        return (float(spec[0]), float(spec[1]))
+
+    if not isinstance(spec, dict):
+        raise TypeError("Error limits must be a number, [vmin, vmax], or an object.")
+
+    pair_key = f"{sim_name}_vs_{dns_name}"
+    for key in (pair_key, sim_name, dns_name, "default"):
+        if key in spec:
+            return _fixed_limit_from_spec(
+                spec[key],
+                sim_name=sim_name,
+                dns_name=dns_name,
+            )
+
+    return None
+
+
+def _auto_symmetric_limits(values: np.ndarray) -> tuple[float, float]:
+    limit = float(np.max(np.abs(values[np.isfinite(values)])))
+    limit = max(limit, 1e-12)
+    return (-limit, limit)
+
+
+def _validate_limits(vmin: float, vmax: float) -> tuple[float, float]:
+    if not np.isfinite(vmin) or not np.isfinite(vmax):
+        raise ValueError("Error color limits must be finite.")
+    if vmin >= vmax:
+        raise ValueError("Error color limits must satisfy vmin < vmax.")
+    if not (vmin < 0.0 < vmax):
+        raise ValueError("Error color limits must include zero.")
+    return (vmin, vmax)
+
+
 def _plot_normalized_error(
     sim_x: np.ndarray,
     sim_y: np.ndarray,
@@ -350,6 +404,7 @@ def _plot_normalized_error(
     dns_name: str,
     output_path: Path,
     settings: dict,
+    norm: str,
 ) -> float:
     """Plot the signed pointwise error used by the common-grid objective."""
 
@@ -367,11 +422,22 @@ def _plot_normalized_error(
 
     dns_std = max(_wstd(dns_grid, weights), 1e-8)
     normalized_error = (sim_grid - dns_grid) / dns_std
-    field_score = float(np.sqrt(np.mean(normalized_error**2)))
+    field_score = _normalized_field_error(
+        dns_grid - sim_grid,
+        weights,
+        dns_std,
+        norm=norm,
+    )
 
-    limit = float(np.max(np.abs(normalized_error)))
-    limit = max(limit, 1e-12)
-    levels = np.linspace(-limit, limit, FIELD_LEVELS)
+    limits = _fixed_limit_from_spec(
+        settings.get("error_limits"),
+        sim_name=sim_name,
+        dns_name=dns_name,
+    )
+    if limits is None:
+        limits = _auto_symmetric_limits(normalized_error)
+    vmin, vmax = _validate_limits(*limits)
+    levels = np.linspace(vmin, vmax, FIELD_LEVELS)
     tri = _triangulation_with_mask(grid[:, 0], grid[:, 1])
 
     fig, ax = plt.subplots(figsize=(12, 8))
@@ -379,11 +445,12 @@ def _plot_normalized_error(
         tri,
         normalized_error,
         levels=levels,
+        extend="both",
         cmap=ERROR_CMAP,
-        norm=mcolors.TwoSlopeNorm(vcenter=0.0, vmin=-limit, vmax=limit),
+        norm=mcolors.TwoSlopeNorm(vcenter=0.0, vmin=vmin, vmax=vmax),
     )
     ax.set_title(
-        f"Normalized error {sim_name} - {dns_name}\n"
+        f"Normalized error {sim_name} - {dns_name} ({norm.upper()})\n"
         f"field objective contribution = {field_score:.6g}"
     )
     ax.set_xlabel("x")
@@ -408,6 +475,13 @@ def _resolve_path(relative_path: str | Path) -> Path:
     if path.is_absolute():
         return path
     return (BASE_DIR / path).resolve()
+
+
+def _resolve_output_dir(cfg: dict, config_name: str) -> Path:
+    output_dir = cfg.get("output_dir")
+    if output_dir:
+        return _resolve_path(output_dir)
+    return (Path(__file__).resolve().parent / "plots" / config_name).resolve()
 
 
 def _normalize_transform_spec(spec: dict[str, str]) -> Callable[[np.ndarray], np.ndarray]:
@@ -437,7 +511,7 @@ def main() -> None:
     cfg = _load_config(config_path)
 
     config_name = cfg["name"]
-    output_dir = (Path(__file__).resolve().parent / "plots" / config_name).resolve()
+    output_dir = _resolve_output_dir(cfg, config_name)
 
     sim_path = _resolve_path(cfg["simulation"]["path"])
     dns_path = _resolve_path(cfg["dns"]["path"])
@@ -513,12 +587,28 @@ def main() -> None:
         print(f"Saved {output_path}")
 
     normalized_settings = cfg.get("plots", {}).get("normalized_error")
+    normalized_norms = ["l2"]
+    if normalized_settings:
+        configured_norms = normalized_settings.get(
+            "norms",
+            [normalized_settings.get("field_error_norm", "l2")],
+        )
+        if isinstance(configured_norms, str):
+            configured_norms = [configured_norms]
+        normalized_norms = list(configured_norms)
+        invalid_norms = [norm for norm in normalized_norms if norm not in {"l1", "l2"}]
+        if invalid_norms:
+            raise ValueError(
+                "plots.normalized_error.norms entries must be 'l1' or 'l2'. "
+                f"Invalid: {invalid_norms}"
+            )
+
     objective_fields = set(
         normalized_settings.get("objective_fields", [])
         if normalized_settings
         else []
     )
-    objective_field_total = 0.0
+    objective_field_totals = {norm: 0.0 for norm in normalized_norms}
 
     for pair in cfg.get("plots", {}).get("comparison", []):
         if not isinstance(pair, list) or len(pair) != 2:
@@ -544,34 +634,38 @@ def main() -> None:
         print(f"Saved {output_path}")
 
         if normalized_settings:
-            normalized_path = (
-                output_dir / f"normalized_error_{sim_name}_vs_{dns_name}.png"
-            )
-            field_score = _plot_normalized_error(
-                sim_x=sim_x,
-                sim_y=sim_y,
-                sim_values=sim_fields[sim_name],
-                dns_x=dns_x,
-                dns_y=dns_y,
-                dns_values=dns_fields[dns_name],
-                sim_name=sim_name,
-                dns_name=dns_name,
-                output_path=normalized_path,
-                settings=normalized_settings,
-            )
-            print(
-                f"{sim_name} normalized field contribution: {field_score:.6g}"
-            )
-            print(f"Saved {normalized_path}")
-            if sim_name in objective_fields:
-                objective_field_total += field_score
+            for norm in normalized_norms:
+                normalized_path = (
+                    output_dir / f"normalized_error_{norm}_{sim_name}_vs_{dns_name}.png"
+                )
+                field_score = _plot_normalized_error(
+                    sim_x=sim_x,
+                    sim_y=sim_y,
+                    sim_values=sim_fields[sim_name],
+                    dns_x=dns_x,
+                    dns_y=dns_y,
+                    dns_values=dns_fields[dns_name],
+                    sim_name=sim_name,
+                    dns_name=dns_name,
+                    output_path=normalized_path,
+                    settings=normalized_settings,
+                    norm=norm,
+                )
+                print(
+                    f"{sim_name} normalized {norm.upper()} field contribution: "
+                    f"{field_score:.6g}"
+                )
+                print(f"Saved {normalized_path}")
+                if sim_name in objective_fields:
+                    objective_field_totals[norm] += field_score
 
     if normalized_settings and objective_fields:
-        print(
-            "Field-only objective "
-            f"({', '.join(sorted(objective_fields))}): "
-            f"{objective_field_total:.6g}"
-        )
+        for norm, total in objective_field_totals.items():
+            print(
+                "Field-only objective "
+                f"({', '.join(sorted(objective_fields))}, {norm.upper()}): "
+                f"{total:.6g}"
+            )
 
     print(f"All plots written to {output_dir}")
 
