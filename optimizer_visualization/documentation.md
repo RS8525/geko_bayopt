@@ -211,3 +211,53 @@ of the optimum location.
 4. **Boundary clipping:** out-of-bounds suggestions are silently pinned to the
    boundary.  The gold star and annotation reflect the best clipped value, not
    the intended step.
+
+---
+
+## Real CFD comparison (`optimizer_comparison.py`)
+
+The synthetic benchmark results above come from analytic test functions.  A
+separate script, `optimizer_comparison.py`, plots the same convergence curves
+using actual CFD runs of the Periodic Hills Re=2800 case.
+
+### Where the data lives
+
+All real-run results are stored under:
+
+```
+results/experiments/optimizer_comparison/
+    one-param-runs/    <- 1-D cases (geko_csep only)
+        BO_1D_ph2800/
+        NM_1D_ph2800/
+        FD_1D_ph2800/
+        PSO_1D_ph2800/
+        NM_BO_1D_ph2800/
+        FD_BO_1D_ph2800/
+        BO_NM_1D_ph2800/
+        BO_FD_1D_ph2800/
+    two-param-runs/    <- 2-D cases (geko_csep + geko_cnw)
+        BO_2D_ph2800/ ... (same naming pattern)
+```
+
+Each experiment folder contains `metadata.csv` (iteration history and scores),
+`optimizer.pkl` (serialised optimizer state), and the Fluent case/data files for
+the best result found.
+
+### How to run
+
+```bash
+# 1-D comparison (default)
+.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py
+
+# 2-D comparison
+.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --dim 2d
+
+# Use --fake to overlay synthetic curves when CFD results are missing
+.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --fake
+```
+
+Output PNGs are written to `optimizer_visualization/plots/` with names
+`optimizer_comparison_1d_linear.png`, `optimizer_comparison_1d_log.png`,
+`optimizer_comparison_1d_zoom.png` (and the equivalent `2d_` variants).
+Missing experiment folders are silently skipped so partial result sets still
+produce a valid plot.

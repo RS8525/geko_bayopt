@@ -9,9 +9,10 @@ All scripts are run from the **project root** and write their output to `optimiz
 
 | File | Purpose |
 |---|---|
-| `benchmark_individual.py` | Runs all 8 optimizers and saves a separate PNG per optimizer |
-| `ot.py` | Convergence comparison against **real CFD results** for the Periodic Hills Re=2800 case |
-| `_benchmark_core.py` | Shared code imported by the benchmark script — do not run directly |
+| `benchmark_individual.py` | Runs all 8 optimizers on the synthetic test functions and saves a separate PNG per optimizer |
+| `optimizer_comparison.py` | Convergence comparison across all 8 optimizers using **real CFD results** (Periodic Hills Re=2800) |
+| `ot.py` | Standalone convergence plotter for a single real CFD experiment — separate from the optimizer comparison |
+| `_benchmark_core.py` | Shared code imported by the benchmark scripts — do not run directly |
 | `documentation.md` | Presentation notes: what to communicate when showing the plots to executives |
 | `plots/` | All output PNGs land here |
 
@@ -34,18 +35,21 @@ Runtime is roughly 1-2 minutes.
 ### Real-results comparison (requires CFD data)
 
 ```bash
-# Produces three plots in optimizer_visualization/plots/:
-#   optimizer_comparison_linear.png
-#   optimizer_comparison_log.png
-#   optimizer_comparison_zoom.png
+# 1-D results (default) -> plots/optimizer_comparison_1d_{linear,log,zoom}.png
+.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py
 
-.venv/Scripts/python.exe optimizer_visualization/ot.py
+# 2-D results -> plots/optimizer_comparison_2d_{linear,log,zoom}.png
+.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --dim 2d
 
 # Overlay synthetic convergence curves when no CFD data is available yet:
-.venv/Scripts/python.exe optimizer_visualization/ot.py --fake
+.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --fake
+.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --dim 2d --fake
 ```
 
-`ot.py` reads from `results/experiments/<experiment_id>/metadata.csv`.
+`optimizer_comparison.py` reads `metadata.csv` from:
+- 1-D: `results/experiments/optimizer_comparison/one-param-runs/<experiment_id>/metadata.csv`
+- 2-D: `results/experiments/optimizer_comparison/two-param-runs/<experiment_id>/metadata.csv`
+
 Experiments that have not been run yet are silently skipped.
 
 ---

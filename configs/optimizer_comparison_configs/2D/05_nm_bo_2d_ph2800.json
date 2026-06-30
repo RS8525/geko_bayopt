@@ -1,0 +1,78 @@
+{
+    "experiment_id": "NM_BO_2D_ph2800",
+    "case": {
+        "kind": "periodic_hills",
+        "options": {
+            "alpha": 1.0,
+            "hill_height": 1,
+            "ly_over_h": 3.035,
+            "fluid_density": 1.0,
+            "fluid_viscosity": 3.571428571e-4,
+            "re_h": 2800,
+            "iter_count": 200,
+            "zone_inlet": "inlet",
+            "zone_outlet": "outlet",
+            "zone_top": "wall",
+            "zone_bottom": "wall_lower",
+            "geometry_path": "data/geometry/Periodic_Hill_10_90_3035.pmdb",
+            "dns_path": "data/dns/periodic_hills/dns_avg_Re2800_columnwise_organized.ascii"
+        }
+    },
+    "parameters": [
+        {"name": "geko_csep", "low": 0.7, "high": 2.5},
+        {"name": "geko_cnw", "low": -2.0, "high": 2.0}
+    ],
+    "objective": {
+        "kind": "gedcp",
+        "options": {
+            "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
+            "integral_weights": {},
+            "lambda_field": 1.0,
+            "lambda_integral": 0.0,
+            "lambda_preference": 0.5
+        }
+    },
+    "optimizer": {
+        "kind": "hybrid_nm_bayes",
+        "stopping_criteria": {
+            "n_calls": 20,
+            "epsilon": null
+        },
+        "kind_specific_options": {
+            "n_initial": 10,
+            "bo_options": {
+                "random_state": 42
+            },
+            "nm_options": {
+                "alpha": 0.8,
+                "gamma": 1.5,
+                "rho": 0.5,
+                "sigma": 0.5
+            }
+        }
+    },
+    "mesh": {
+        "length_unit": "mm",
+        "cad_route": "Workbench",
+        "cad_extension": "pmdb",
+        "min_size": 7.2,
+        "max_size": 21.6,
+        "growth_rate": 1.15,
+        "curvature_normal_angle": 12,
+        "bl_first_layer_height": 0.72,
+        "bl_number_of_layers": 22,
+        "bl_growth_rate": 1.2,
+        "generate_quads": true
+    },
+    "residual_criteria": {
+        "continuity": 1.0e-5,
+        "x_velocity": 1.0e-5,
+        "y_velocity": 1.0e-5,
+        "k": 1.0e-5,
+        "omega": 1.0e-5
+    },
+    "fluent_work_dir": "results/experiments/optimizer_comparison/two-param-runs/NM_BO_2D_ph2800",
+    "results_dir": "results/experiments/optimizer_comparison/two-param-runs/NM_BO_2D_ph2800",
+    "session_strategy": "live",
+    "keep_only_best_case_files": true
+}
