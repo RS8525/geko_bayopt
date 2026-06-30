@@ -1,4 +1,4 @@
-{
+﻿{
   "experiment_id": "ffs_re4000_csep_cnw_final",
   "case": {
     "kind": "ffs",
@@ -17,8 +17,8 @@
       "outlet_static_pressure": 0,
       "zone_top": "ceiling",
       "zone_bottom": "step",
-      "geometry_path": "../../data/geometry/ffs/FFS_3_2d_v2.dsco",
-      "dns_path": "../../data/dns/ffs/FFS_Reh4000_SBES_Node_2D.csv"
+      "geometry_path": "data/geometry/ffs/FFS_3_2d_v2.dsco",
+      "dns_path": "data/dns/ffs/FFS_Reh4000_SBES_Node_2D.csv"
     }
   },
   "parameters": [
