@@ -16,8 +16,6 @@ coefficient preference with `lambda_preference = 0.5`.
 Completed final FFS result bundles are consolidated under
 `results/ffs_final_runs/all_param_runs/` and
 `results/ffs_final_runs/two-param-runs/`, one directory per `experiment_id`.
-The unfinished `ffs_re6000_all_param_mae_final` run still writes to the
-historical split `results/fluent/` and `results/experiments/` directories.
 
 Final plotting configs live in `../scripts/ffs/plots/final/`. Each completed
 run has a default-GEKO and optimized-GEKO config. Those configs write plots

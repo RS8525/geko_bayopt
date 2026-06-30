@@ -1,0 +1,69 @@
+{
+  "name": "ffs_re6000_all_param_mae_final_default_geko",
+  "output_dir": "results/ffs_final_runs/all_param_runs/ffs_re6000_all_param_mae_final/plots/default_geko",
+  "simulation": {
+    "path": "results/ffs_final_runs/all_param_runs/ffs_re6000_all_param_mae_final/ffs_Reh6000_geko_default.ascii",
+    "x_column": "x-coordinate",
+    "y_column": "y-coordinate",
+    "fields": {
+      "Ux": "x-velocity",
+      "Uy": "y-velocity",
+      "p": "pressure",
+      "k_total": "turb-kinetic-energy"
+    },
+    "transforms": {
+      "p": {
+        "kind": "subtract_min"
+      }
+    }
+  },
+  "dns": {
+    "path": "data/dns/ffs/FFS_Reh6000_SBES_Node_NEW_2D.csv",
+    "x_column": "x-coordinate",
+    "y_column": "y-coordinate",
+    "fields": {
+      "Ux": "mean-x-velocity",
+      "k_total": "total-turbulent-kinetic-energy"
+    },
+    "transforms": {}
+  },
+  "plots": {
+    "simulation": [
+      "Ux",
+      "Uy",
+      "p",
+      "k_total"
+    ],
+    "dns": [
+      "Ux",
+      "k_total"
+    ],
+    "comparison": [
+      [
+        "Ux",
+        "Ux"
+      ],
+      [
+        "k_total",
+        "k_total"
+      ]
+    ],
+    "normalized_error": {
+      "common_grid_nx": 360,
+      "common_grid_ny": 120,
+      "common_grid_floor": "ffs_step",
+      "norms": [
+        "l1",
+        "l2"
+      ],
+      "objective_fields": [
+        "Ux",
+        "k_total"
+      ],
+      "error_limits": {
+        "Ux": 1.11,
+        "k_total": 6.86
+      }
+    }
+  }
+}

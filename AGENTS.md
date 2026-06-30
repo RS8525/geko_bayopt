@@ -125,9 +125,7 @@ Completed final FFS result bundles are consolidated under
 `two-param-runs/<experiment_id>/`. In those bundles, `fluent_work_dir` and
 `results_dir` intentionally point to the same folder so the retained final
 ASCII, default ASCII, solved `.cas.h5`/`.dat.h5`, `metadata.csv`, and
-`optimizer.pkl` stay together. The unfinished `ffs_re6000_all_param_mae_final`
-run still uses the historical split between `results/fluent/` and
-`results/experiments/` until it completes.
+`optimizer.pkl` stay together.
 
 ---
 
@@ -282,7 +280,7 @@ These are baked into `fluent/`:
 
 - `configs/ffs_final/2_param/` contains one C_SEP/C_NW Bayesian optimization config for each of Re=2000, 3000, 4000, and 6000.
 - `configs/ffs_final/all_param/` contains matching all-parameter configs named `ffs_re*_all_param*.json`; they optimize `geko_csep`, `geko_cnw`, `geko_cjet`, `geko_cturb`, and `geko_cmix`.
-- Completed final FFS run artifacts live in `results/ffs_final_runs/all_param_runs/` and `results/ffs_final_runs/two-param-runs/`, one directory per `experiment_id`. `ffs_re6000_all_param_mae_final` is excluded from that publication bundle until it completes.
+- Completed final FFS run artifacts live in `results/ffs_final_runs/all_param_runs/` and `results/ffs_final_runs/two-param-runs/`, one directory per `experiment_id`.
 - Each config hardcodes a unique `base_case_name`, DNS reference, fluid viscosity, inlet turbulence intensity, and inlet viscosity ratio.
 - The 2-parameter runs perform 48 evaluations: 16 Sobol initial points and 32 GP-guided proposals. The all-parameter runs perform 100 evaluations: 32 Sobol initial points and 68 GP-guided proposals. Epsilon early stopping is disabled so every case receives the full budget.
 - All final FFS runs require continuity, velocity, `k`, and `omega` residuals
