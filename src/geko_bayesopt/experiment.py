@@ -136,8 +136,8 @@ def run_experiment(
     repo_root : Path, optional
         Repository root, used to resolve default output directories
         and the DNS path if it's given as a relative path.
-        Defaults to the JSON file's grandparent (assumes
-        ``<root>/configs/<name>.json``).
+        Defaults to the nearest ancestor directory containing
+        ``pyproject.toml`` or ``.git``.
     ui_mode : str
         Forwarded to PyFluent launches.
     """
@@ -145,8 +145,16 @@ def run_experiment(
     cfg = ExperimentConfig.load(config_path)
 
     if repo_root is None:
-        # configs/<name>.json -> repo root is two levels up
-        repo_root = config_path.parent.parent
+        # Walk up from the config file to find the repo root (contains pyproject.toml or .git).
+        # This is robust to configs being nested at any depth under configs/.
+        candidate = config_path.parent
+        while candidate != candidate.parent:
+            if (candidate / "pyproject.toml").exists() or (candidate / ".git").exists():
+                repo_root = candidate
+                break
+            candidate = candidate.parent
+        else:
+            repo_root = config_path.parent.parent
 
     print(f"[experiment] Starting: {cfg.experiment_id}")
     print(f"[experiment] Config: {config_path}")
