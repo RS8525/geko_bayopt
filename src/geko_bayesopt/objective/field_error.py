@@ -166,7 +166,7 @@ class FieldErrorCalculator:
         field_weights: dict[str, float] | None = None,
         mask_hill: bool = False,
         domain_length: float = 9.0,
-        area_weight_mode: str = "auto",
+        area_weight_mode: str = "uniform",
         evaluation_mode: str = "dns_points",
         common_grid_nx: int = 360,
         common_grid_ny: int = 120,
