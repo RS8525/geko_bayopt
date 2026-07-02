@@ -41,7 +41,7 @@ done: bool      = opt.should_stop()  # convergence / budget check
 
 `FiniteDifferenceOptimizer` interleaves two types of evaluations in a fixed cycle:
 - **D probe evals** — perturb each dimension by `step_size × range` to estimate ∂f/∂xᵢ
-- **1 gradient step eval** — move `base − lr × grad`, clipped to bounds
+- **1 gradient step eval** — move `base − lr × grad` (bounds NOT enforced)
 
 The optimizer's `ask()`/`tell()` interface returns probe points and step points
 identically.  For plotting, probe points are noise (they exist only to estimate the
@@ -63,6 +63,33 @@ to `plot_1d_ax` / `plot_2d_ax` to filter automatically.
 property (e.g. `pending_op: str`) so callers can query whether the last `ask()`
 was a probe or a gradient step without relying on cycle arithmetic.
 
+### Base acceptance is unconditional (classic gradient descent, not elitist)
+
+At the end of each cycle, `_process_result` sets `self._base` to whatever the
+gradient step just evaluated to — **not** to the best point seen so far. This
+is intentional, not an oversight: `_next_probe_point` / `_gradient_step_point`
+are pure functions of `self._base` alone, so if the base were instead reset to
+`argmin` over all history, any cycle whose step failed to beat its starting
+point would leave `self._base` unchanged, and every subsequent cycle would
+recompute and re-evaluate the exact same probe/step points forever (this was a
+real bug — a bad first gradient step, e.g. from `lr` too large, could lock the
+optimizer onto the same handful of points for the rest of the run).
+
+Accepting the step unconditionally means the base always moves, so the
+optimizer keeps exploring even after an uphill step. Two consequences to keep
+in mind:
+- `step_history_y` is **not monotonic** — a step can be worse than the base it
+  came from. `should_stop`'s window/epsilon check still works (it compares
+  `min()` over trailing vs. leading windows), but don't assume
+  `step_history_y[-1] <= step_history_y[-2]` anywhere.
+- Because probes use a fixed forward-difference `delta` (not shrinking), near
+  a smooth local optimum the walk settles into a small limit cycle biased by
+  roughly `delta/2` from the true optimum (textbook forward-FD bias), rather
+  than converging to a single fixed point. This is expected and is what
+  `should_stop`'s epsilon/window check is meant to catch — set `epsilon` for
+  real CFD runs if you want this to auto-terminate instead of burning the
+  rest of the eval budget oscillating.
+
 ### Learning rate must match the function's Lipschitz constant
 
 The correct step size is `lr = 1 / L` where L is the spectral norm of the Hessian
@@ -79,20 +106,22 @@ The x₂ direction of the 2D composite function is piecewise-linear (Hessian = 0
 away from the kink at x₂ = 0.5).  Current benchmark lr = 0.015 is calibrated
 to the x₁ direction and works well in practice.
 
-### Boundary clipping — current workaround, not ideal
+### Boundary policy — no clipping anywhere (resolved decision)
 
-`_clip(x, params)` in `_benchmark_core.py` pins any out-of-bounds suggestion to
-the nearest boundary before evaluation and `tell()`.  This handles two cases:
-- **NM reflections** near the lower bound can produce x < low.
-- **FD gradient steps** with large lr overshoot bounds.
+Neither the optimizers (NM, FD) nor the benchmark harness clip proposals to the
+parameter bounds; every suggested point is evaluated exactly where proposed.
+NM reflections and FD probes/steps may wander outside the bounds — the
+objective returns a poor score there and the walk retreats naturally.  This is
+deliberate: optimizer comparisons are meant to *expose* bad boundary behavior,
+not mask it, and clipping caused two real problems: (a) persistent re-evaluation
+of identical boundary points (NM internal clipping, FD boundary limit cycles),
+and (b) the optimizer proposing one point while a different one was evaluated
+and reported.  PSO's absorption (particle pinned to bound, velocity zeroed) is
+part of the PSO algorithm itself and stays.
 
-Clipping is physically hard to justify: the optimizer proposes one point but we
-evaluate (and report) a different one.  Alternatives to investigate:
-- **Reflection:** mirror the overshoot back into the domain.
-- **Backtracking line search:** halve `lr` until the step stays in bounds.
-- **Rejection / re-ask:** discard the point and call `ask()` again.
-
-This is tracked as an open task.
+Consequence for the warmup hybrids: out-of-bounds NM/FD evaluations are
+excluded from the BO warm-start history (skopt rejects out-of-space points) —
+see the in-bounds guards in both `tell()` methods.
 
 ### FD on the real GEKO objective
 
@@ -105,20 +134,23 @@ and `configs/optimizer_comparison_configs/08_bo_fd_1d_ph2800.json` uses `learnin
 ## Nelder–Mead — known difficulties
 
 NM can propose simplex vertices outside the parameter bounds (reflections near the
-lower bound produce x < low).  The same `_clip()` workaround as FD is applied.
-See the boundary clipping section above for open alternatives.
+lower bound produce x < low).  These are evaluated as-is — see the boundary
+policy section above.
 
 ---
 
 ## Particle Swarm Optimization — equal budget, particle-coloured plots
 
-PSO uses `n_particles × (1 + max_iter)` evaluations total.  Budget equals all other
-optimizers in both dimensions:
+PSO uses `n_particles × (1 + max_iter)` evaluations total.  `max_iter` is **not a
+config option** — it is derived internally as `n_calls // n_particles − 1` so the
+inertia decay exactly spans the eval budget; `test_config` requires `n_calls` to
+be divisible by `n_particles`.  A leftover `max_iter` key in old configs is
+ignored.  Budget equals all other optimizers in both dimensions:
 
-| Dimension | n_particles | max_iter | Total evals |
-|-----------|------------|---------|------------|
-| 1D        | 4          | 4       | 20         |
-| 2D        | 4          | 8       | 36         |
+| Dimension | n_particles | derived max_iter | Total evals (n_calls) |
+|-----------|------------|-----------------|----------------------|
+| 1D        | 4          | 4               | 20                   |
+| 2D        | 4          | 8               | 36                   |
 
 **Plotting:** PSO dots are coloured by particle index (not evaluation order) so each
 particle's trajectory is visually traceable across swarm iterations.  Each particle
@@ -153,8 +185,8 @@ by starting with a tighter search radius.
 
 **BO → NM:** `nm_options` accepts `simplex_scale` (float, default 1.0).  In the
 benchmark and real configs, `simplex_scale=0.6` shrinks the NM startup simplex to
-60% of its normal size (x₁ offsets ±0.15 instead of ±0.25; x₂ offset +0.06 instead
-of +0.10).  Implemented in `HybridBayesNelderMeadOptimizer._build_nm_simplex`
+60% of its normal size (offsets ±0.06 instead of the uniform ±0.10).
+Implemented in `HybridBayesNelderMeadOptimizer._build_nm_simplex`
 (`src/geko_bayesopt/optimizer.py`).
 
 **BO → FD:** Pass smaller `step_size` and `learning_rate` in `fd_options`:

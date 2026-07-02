@@ -133,8 +133,10 @@ N_2D = 36   # total function evaluations for 2-D benchmark
 #                 Chosen to align with the natural cycle lengths of NM / FD.
 #
 # PSO accounting  n_particles × (1 init + max_iter swarm iterations):
-#   1-D:  4 × (1+4) = 20 evals  (20 div 4 ✓)  →  n_particles=4, max_iter=4
-#   2-D:  4 × (1+8) = 36 evals  (36 div 4 ✓)  →  n_particles=4, max_iter=8
+#   max_iter is derived internally from n_calls // n_particles - 1, so
+#   n_calls must divide evenly by n_particles:
+#   1-D:  20 evals / 4 particles → max_iter = 4
+#   2-D:  36 evals / 4 particles → max_iter = 8
 #
 # FD cycle lengths (base + D probes + 1 step per cycle):
 #   1-D: total must be divisible by 2 (D+1).  20 / 2 = 10 cycles ✓
@@ -186,14 +188,14 @@ OPTIMIZERS: list[tuple[
         "Particle Swarm  (PSO)",
         "04_particle_swarm",
         None, None,
-        # 4 particles × (1 init + 4 swarm) = 20 evals  (20 div 4 ✓)
+        # 4 particles, 20 evals → max_iter = 20/4 - 1 = 4 (derived internally)
         OptimizerSection(kind="pso", stopping_criteria=_S1,
                          kind_specific_options={
-                             "n_particles": 4, "max_iter": 4, "random_state": 1}),
-        # 4 particles × (1 init + 8 swarm) = 36 evals  (36 div 4 ✓)
+                             "n_particles": 4, "random_state": 1}),
+        # 4 particles, 36 evals → max_iter = 36/4 - 1 = 8 (derived internally)
         OptimizerSection(kind="pso", stopping_criteria=_S2,
                          kind_specific_options={
-                             "n_particles": 4, "max_iter": 8, "random_state": 1}),
+                             "n_particles": 4, "random_state": 1}),
     ),
 
     (
@@ -277,17 +279,6 @@ OPTIMIZERS: list[tuple[
 # Run helpers
 # ===========================================================================
 
-def _clip(x: list[float], params: list[ParameterSpec]) -> list[float]:
-    """Clip a suggested point to parameter bounds.
-
-    NM can suggest simplex vertices outside bounds (reflections near boundaries).
-    Clipping before evaluation and tell is the standard bounded-optimisation
-    convention: treat the boundary as the actual evaluation site.
-    """
-    return [float(np.clip(x[i], params[i].low, params[i].high))
-            for i in range(len(params))]
-
-
 def _fd_show_mask(section: OptimizerSection, n: int, d: int) -> list[bool]:
     """Return True for evals to show; False for FD finite-difference probes to hide.
 
@@ -332,7 +323,10 @@ def run_1d(section: OptimizerSection) -> tuple[list[float], list[float], list[bo
     xs: list[float] = []
     ys: list[float] = []
     for _ in range(n):
-        x = _clip(opt.ask(), PARAMS_1D)
+        # Proposals are evaluated exactly where suggested — no clipping.
+        # NM and FD may deliberately wander outside the bounds; comparisons
+        # are meant to expose that boundary behavior, not mask it.
+        x = [float(v) for v in opt.ask()]
         y = float(f1d(x[0]))
         opt.tell(x, y)
         xs.append(x[0])
@@ -348,7 +342,8 @@ def run_2d(
     xs: list[tuple[float, float]] = []
     ys: list[float] = []
     for _ in range(n):
-        x = _clip(opt.ask(), PARAMS_2D)
+        # No clipping — see run_1d.
+        x = [float(v) for v in opt.ask()]
         y = float(f2d(x[0], x[1]))
         opt.tell(x, y)
         xs.append((x[0], x[1]))

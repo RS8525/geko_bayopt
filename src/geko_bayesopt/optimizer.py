@@ -1,15 +1,22 @@
 """
 Optimizer dispatcher.
 
-Each optimizer kind builds an object exposing ``ask()`` / ``tell()`` /
-state save/load. ``skopt.Optimizer`` already implements this interface,
-so the BO loop is identical regardless of which optimizer is in use.
+Each optimizer kind builds an object implementing the ``Optimizer`` protocol
+below.  The raw ``skopt.Optimizer`` only provides ask/tell, so it is wrapped
+(``SkoptGPOptimizer``) to add the rest.
 
 Add a new optimizer by:
-    1. Implementing a small adapter class with the four methods used
-       in ``experiment.py`` (``ask``, ``tell``, ``get_state``, ``set_state``).
+    1. Implementing a class with ``ask``, ``tell``, ``should_stop`` and
+       ``test_config``.  ``build_optimizer`` calls ``test_config()``
+       unconditionally, and the experiment loop polls ``should_stop()``.
+       The state machine MUST advance inside ``tell()``: resumed runs are
+       reconstructed by replaying every completed trial through ``tell()``
+       without any ``ask()`` calls (``experiment._replay_into_optimizer``).
     2. Adding a builder branch in ``build_optimizer``.
     3. Extending ``Literal`` in ``config.OptimizerSection``.
+
+There is deliberately no snapshot save/restore API: resume always
+reconstructs the optimizer by replaying completed trials through ``tell()``.
 """
 
 from __future__ import annotations
@@ -22,15 +29,18 @@ from .config import OptimizerSection, ParameterSpec
 
 
 class Optimizer(Protocol):
-    """Structural type for what the experiment loop needs.
+    """Structural type for what the experiment loop and builder need.
 
-    skopt.Optimizer satisfies this directly. Custom optimizers (e.g.
-    a future BoTorch wrapper) just need methods with the same names
-    and signatures.
+    Note: the raw ``skopt.Optimizer`` does NOT satisfy this protocol (it has
+    no ``should_stop``/``test_config``) — that is what the ``SkoptGPOptimizer``
+    wrapper is for.  Custom optimizers (e.g. a future BoTorch wrapper) need
+    all four methods.
     """
 
     def ask(self) -> list[float]: ...
     def tell(self, x: list[float], y: float) -> Any: ...
+    def should_stop(self) -> bool: ...
+    def test_config(self) -> None: ...
 
 
 # --------------------------------------------------------------------- #
@@ -55,6 +65,40 @@ def _should_stop(
     prior_best  = min(history_y[:-window])
     denom = max(abs(prior_best), 1e-10)
     return abs(recent_best - prior_best) / denom < epsilon
+
+
+def _resolve_bo_base_estimator(
+    bayesian_kind: str, random_state: int | None = None
+) -> Any:
+    """Build the skopt base_estimator for a given ``bayesian_kind``.
+
+    For "GP" this constructs the same GaussianProcessRegressor used by the
+    standalone ``skopt_gp`` optimizer. Passing an already-built object (rather
+    than the string "GP") into ``skopt.Optimizer`` is required for two reasons:
+    skopt's own ``cook_estimator`` for "GP" uses different kernel/noise/
+    n_restarts_optimizer defaults than ours, and — more subtly — it also draws
+    from the Optimizer's shared RNG stream to seed the estimator, which shifts
+    the subsequent Sobol initial-point sequence even when random_state is
+    identical across configs. Other kinds pass through as strings for skopt's
+    own cook_estimator to build (no equivalent mismatch to avoid there).
+
+    ``random_state`` seeds the estimator itself (the L-BFGS restarts of the
+    kernel hyperparameter fit).  It must be set explicitly: skopt only seeds
+    estimators it cooks, and with sklearn's default ``random_state=None``
+    every fit draws from the global numpy RNG, making each model-based
+    proposal irreproducible across runs and resumes.  Seeding the estimator
+    does not touch the skopt Optimizer's own RNG, so the Sobol initial-point
+    sequence is unaffected.
+    """
+    if bayesian_kind == "GP":
+        from skopt.learning import GaussianProcessRegressor
+        from skopt.learning.gaussian_process.kernels import Matern
+        return GaussianProcessRegressor(
+            kernel=Matern(nu=2.5),
+            n_restarts_optimizer=10,
+            random_state=random_state,
+        )
+    return bayesian_kind
 
 
 # --------------------------------------------------------------------- #
@@ -134,7 +178,8 @@ class NelderMeadOptimizer:
         if len(self._history_x) < len(self._initial_points):
             return self._initial_points[len(self._history_x)]
 
-        # Phase 2: initialize the simplex on the first entry after startup.
+        # Phase 2: tell() initializes the simplex when startup completes;
+        # this fallback is defensive and unreachable in normal operation.
         if self._simplex_x is None:
             self._init_simplex()
             self._prepare_reflect()
@@ -145,12 +190,16 @@ class NelderMeadOptimizer:
         self._history_x.append(list(x))
         self._history_y.append(float(y))
 
-        # Still collecting startup evaluations.
-        if len(self._history_x) <= len(self._initial_points):
-            return
-
-        # Simplex not yet initialized — next ask() will do it.
         if self._simplex_x is None:
+            # Initialize the simplex as soon as enough evaluations exist.
+            # This happens in tell() (not ask()) so that a resumed run, which
+            # replays its completed trials through tell() without ever calling
+            # ask(), reconstructs the simplex and then advances the state
+            # machine through the remaining replayed results — instead of
+            # silently dropping them and restarting from the initial points.
+            if len(self._history_x) >= len(self._initial_points):
+                self._init_simplex()
+                self._prepare_reflect()
             return
 
         self._process_result(np.array(x, dtype=float), float(y))
@@ -160,9 +209,30 @@ class NelderMeadOptimizer:
     # ------------------------------------------------------------------ #
 
     def _init_simplex(self) -> None:
-        n = len(self._initial_points)
-        self._simplex_x = [np.array(self._history_x[i], dtype=float) for i in range(n)]
-        self._simplex_y = [float(self._history_y[i]) for i in range(n)]
+        """Build the active simplex from the evaluation history.
+
+        Selects the best (lowest-y) point in the history plus its n_dim
+        nearest neighbours in parameter space (Euclidean distance).  In a
+        fresh run the history contains exactly the n_dim+1 startup
+        evaluations when this is called, so all of them are selected and the
+        result is the classic startup simplex.  The best+nearest rule matters
+        when the history is longer than the startup set (e.g. a simplex
+        rebuilt from a history that also contains non-startup evaluations):
+        it then recovers a compact simplex around the best point seen so far.
+
+        Caveat: if the history contains duplicated points (e.g. repeated
+        boundary evaluations), the selected vertices can coincide and the
+        simplex degenerates.  Callers seeding NM from arbitrary histories
+        should ensure the points are distinct.
+        """
+        xs = np.array(self._history_x, dtype=float)
+        ys = np.array(self._history_y, dtype=float)
+        best = int(np.argmin(ys))
+        dist = np.linalg.norm(xs - xs[best], axis=1)
+        dist[best] = -1.0   # guarantee the best point itself is selected
+        idx = np.argsort(dist, kind="stable")[: self.n_dim + 1]
+        self._simplex_x = [xs[i].copy() for i in idx]
+        self._simplex_y = [float(ys[i]) for i in idx]
 
     # ------------------------------------------------------------------ #
     # NM state machine                                                    #
@@ -276,22 +346,25 @@ class NelderMeadOptimizer:
 
         defaults = [all_defaults[parameter.name] for parameter in self.parameters]
 
+        # Uniform startup offset of 0.1 in every dimension.
+        offset = 0.1
+
         points: list[list[float]] = []
         if self.n_dim == 1:
             points = [
-                [self._clip_value(defaults[0] - 0.25, 0)],
-                [self._clip_value(defaults[0] + 0.25, 0)],
+                [self._clip_value(defaults[0] - offset, 0)],
+                [self._clip_value(defaults[0] + offset, 0)],
             ]
         else:
             lower = defaults.copy()
             upper = defaults.copy()
-            lower[0] = self._clip_value(defaults[0] - 0.25, 0)
-            upper[0] = self._clip_value(defaults[0] + 0.25, 0)
+            lower[0] = self._clip_value(defaults[0] - offset, 0)
+            upper[0] = self._clip_value(defaults[0] + offset, 0)
             points.append(lower)
             points.append(upper)
             for dim in range(1, self.n_dim):
                 point = defaults.copy()
-                point[dim] = self._clip_value(defaults[dim] + 0.10, dim)
+                point[dim] = self._clip_value(defaults[dim] + offset, dim)
                 points.append(point)
 
         return points
@@ -299,52 +372,24 @@ class NelderMeadOptimizer:
     def _clip_value(self, value: float, dim: int) -> float:
         return float(np.clip(value, self.bounds[dim, 0], self.bounds[dim, 1]))
 
-    # ------------------------------------------------------------------ #
-    # Persistence                                                         #
-    # ------------------------------------------------------------------ #
-
-    def get_state(self) -> dict[str, Any]:
-        return {
-            "history_x":     self._history_x,
-            "history_y":     self._history_y,
-            "iter_best_y":   self._iter_best_y,
-            "simplex_x":     [x.tolist() for x in self._simplex_x] if self._simplex_x is not None else None,
-            "simplex_y":     self._simplex_y,
-            "pending_op":    self._pending_op,
-            "pending_x":     self._pending_x.tolist() if self._pending_x is not None else None,
-            "x0":            self._x0.tolist() if self._x0 is not None else None,
-            "x_r":           self._x_r.tolist() if self._x_r is not None else None,
-            "f_r":           self._f_r,
-            "x_e":           self._x_e.tolist() if self._x_e is not None else None,
-            "x_c":           self._x_c.tolist() if self._x_c is not None else None,
-            "contract_type": self._contract_type,
-            "shrink_idx":    self._shrink_idx,
-        }
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._history_x    = state["history_x"]
-        self._history_y    = state["history_y"]
-        self._iter_best_y  = state.get("iter_best_y", [])
-        sx = state.get("simplex_x")
-        self._simplex_x    = [np.array(x, dtype=float) for x in sx] if sx is not None else None
-        self._simplex_y    = state.get("simplex_y")
-        self._pending_op   = state.get("pending_op")
-        px = state.get("pending_x")
-        self._pending_x    = np.array(px, dtype=float) if px is not None else None
-        x0 = state.get("x0")
-        self._x0           = np.array(x0, dtype=float) if x0 is not None else None
-        x_r = state.get("x_r")
-        self._x_r          = np.array(x_r, dtype=float) if x_r is not None else None
-        self._f_r          = state.get("f_r")
-        x_e = state.get("x_e")
-        self._x_e          = np.array(x_e, dtype=float) if x_e is not None else None
-        x_c = state.get("x_c")
-        self._x_c          = np.array(x_c, dtype=float) if x_c is not None else None
-        self._contract_type = state.get("contract_type")
-        self._shrink_idx   = state.get("shrink_idx", 0)
-
     def should_stop(self) -> bool:
         return _should_stop(self._iter_best_y, self.epsilon, window=self.window)
+
+    def test_config(self) -> None:
+        if self.n_dim < 1:
+            raise ValueError("nelder_mead requires at least one parameter.")
+        if self._ALPHA <= 0:
+            raise ValueError(f"options.alpha must be > 0, got {self._ALPHA!r}.")
+        if self._GAMMA <= 1:
+            raise ValueError(f"options.gamma must be > 1, got {self._GAMMA!r}.")
+        if not 0 < self._RHO < 1:
+            raise ValueError(f"options.rho must be in (0, 1), got {self._RHO!r}.")
+        if not 0 < self._SIGMA < 1:
+            raise ValueError(f"options.sigma must be in (0, 1), got {self._SIGMA!r}.")
+        if self.epsilon is not None and self.epsilon <= 0:
+            raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
 
 
 # --------------------------------------------------------------------- #
@@ -356,7 +401,17 @@ class FiniteDifferenceOptimizer:
 
     Each cycle: probe the objective at base + delta*e_i for each dimension i
     (forward finite difference), compute the gradient, take a descent step,
-    then pick the best observed point as the base for the next cycle.
+    and unconditionally accept the stepped point as the base for the next
+    cycle.  There is no keep-best acceptance check — see the 'step' branch of
+    _process_result for the rationale.
+
+    Bounds are NOT enforced on probes or gradient steps (same policy as
+    Nelder-Mead): the walk may leave the parameter bounds, the objective is
+    evaluated there, and a poor score steers it back naturally.  Clipping to
+    the bounds caused boundary limit cycles — a step pinned to the bound
+    became the next base and every subsequent cycle re-evaluated (nearly) the
+    same boundary points.  Optimizer comparisons are meant to expose this
+    kind of boundary behavior, not mask it.
     """
 
     def __init__(
@@ -430,10 +485,14 @@ class FiniteDifferenceOptimizer:
                 self._pending_op = 'step'
 
         elif self._pending_op == 'step':
-            # Gradient step evaluated — start a new cycle from the best seen.
-            best_idx     = int(np.argmin(self._history_y))
-            self._base   = np.array(self._history_x[best_idx], dtype=float)
-            self._base_y = float(self._history_y[best_idx])
+            # Gradient step evaluated — unconditionally accept it as the next
+            # base (classic FD gradient descent, no "keep best" acceptance
+            # check). Accepting the best-of-history point instead would make
+            # the base "stick" whenever a cycle fails to improve, and since
+            # ask() is a pure function of self._base, every later cycle would
+            # then probe the exact same points forever.
+            self._base   = x.copy()
+            self._base_y = y
             self._step_history_y.append(self._base_y)
             self._start_probing()
 
@@ -450,12 +509,9 @@ class FiniteDifferenceOptimizer:
         raw  = (high - low) * self._step_size
         delta = float(np.clip(raw, self._min_step, self._max_step))
 
-        # Flip direction if the positive step would leave the upper bound.
-        if self._base[dim] + delta > high:
-            delta = -delta
-        # Clamp so we never leave either bound.
-        delta = float(np.clip(delta, low - self._base[dim], high - self._base[dim]))
-
+        # No bounds enforcement: the probe may leave the parameter bounds
+        # (see the class docstring).  The bounds are only used to scale the
+        # perturbation to the parameter's range.
         self._probe_deltas.append(delta)
         x = self._base.copy()
         x[dim] += delta
@@ -467,39 +523,8 @@ class FiniteDifferenceOptimizer:
             for f_probe, delta in zip(self._probe_y, self._probe_deltas)
         ])
 
-        return np.clip(self._base - self._learning_rate * grad, self.bounds[:, 0], self.bounds[:, 1])
-
-    # ------------------------------------------------------------------ #
-    # Persistence                                                         #
-    # ------------------------------------------------------------------ #
-
-    def get_state(self) -> dict[str, Any]:
-        return {
-            "history_x":      self._history_x,
-            "history_y":      self._history_y,
-            "step_history_y": self._step_history_y,
-            "pending_x":      self._pending_x.tolist() if self._pending_x is not None else None,
-            "pending_op":   self._pending_op,
-            "base":         self._base.tolist() if self._base is not None else None,
-            "base_y":       self._base_y,
-            "probe_dim":    self._probe_dim,
-            "probe_deltas": self._probe_deltas,
-            "probe_y":      self._probe_y,
-        }
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._history_x      = state["history_x"]
-        self._history_y      = state["history_y"]
-        self._step_history_y = state.get("step_history_y", [])
-        px = state.get("pending_x")
-        self._pending_x    = np.array(px, dtype=float) if px is not None else None
-        self._pending_op   = state.get("pending_op")
-        base = state.get("base")
-        self._base         = np.array(base, dtype=float) if base is not None else None
-        self._base_y       = state.get("base_y")
-        self._probe_dim    = state.get("probe_dim", 0)
-        self._probe_deltas = state.get("probe_deltas", [])
-        self._probe_y      = state.get("probe_y", [])
+        # No bounds enforcement on the step (see the class docstring).
+        return self._base - self._learning_rate * grad
 
     def should_stop(self) -> bool:
         return _should_stop(self._step_history_y, self.epsilon, window=self.window)
@@ -519,6 +544,8 @@ class FiniteDifferenceOptimizer:
             )
         if self.epsilon is not None and self.epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
 
 
 
@@ -534,9 +561,18 @@ class ParticleSwarmOptimizer:
     personal bests, the global best, and velocities are updated and the
     inertia weight is decayed.
 
-    Required option:
-        max_iter    : int   – total swarm iterations for the linear inertia
-                              decay schedule (typically n_calls // n_particles).
+    Initial positions are drawn from a Sobol' sequence (same
+    ``skopt.sampler.Sobol`` mechanism, seeded from ``random_state`` the same
+    way as the BO optimizers) rather than uniform random sampling, for better
+    coverage of the parameter space.  Initial velocities are zero — the first
+    swarm move is driven entirely by the cognitive/social attraction terms
+    once personal/global bests are known from the Sobol evaluations.
+
+    The number of swarm iterations is derived from the evaluation budget:
+    ``max_iter = n_calls // n_particles - 1`` (the init sweep costs
+    ``n_particles`` evaluations, each swarm iteration costs ``n_particles``
+    more), so the linear inertia decay exactly spans the run.  ``test_config``
+    requires ``n_calls`` to be divisible by ``n_particles``.
 
     Optional options (with defaults):
         n_particles : int   – swarm size (default 10)
@@ -557,6 +593,7 @@ class ParticleSwarmOptimizer:
         parameters: list[ParameterSpec],
         *,
         options: dict[str, Any],
+        n_calls: int,
         epsilon: float | None = None,
         window: int = 3,
     ):
@@ -574,9 +611,15 @@ class ParticleSwarmOptimizer:
         self.c1          = float(opts.get("c1",        1.5))
         self.c2          = float(opts.get("c2",        1.5))
         self.v_max_frac  = float(opts.get("v_max_frac", 0.2))
-        self.max_iter    = int(opts["max_iter"])
+        # max_iter is derived from the evaluation budget so the inertia decay
+        # exactly spans the run: the init sweep costs n_particles evaluations
+        # and each swarm iteration costs n_particles more.  test_config checks
+        # that the budget divides evenly into swarm iterations.
+        self.n_calls  = int(n_calls)
+        self.max_iter = self.n_calls // self.n_particles - 1
+        self._random_state = opts.get("random_state", 42)
 
-        self._rng    = np.random.default_rng(int(opts.get("random_state", 42)))
+        self._rng    = np.random.default_rng(int(self._random_state))
         self._v_max  = self.v_max_frac * (self.bounds[:, 1] - self.bounds[:, 0])
 
         # Full history
@@ -612,17 +655,30 @@ class ParticleSwarmOptimizer:
     # ------------------------------------------------------------------ #
 
     def _sample_initial_positions(self) -> list[np.ndarray]:
-        low, high = self.bounds[:, 0], self.bounds[:, 1]
-        return [self._rng.uniform(low, high) for _ in range(self.n_particles)]
+        """Draw initial particle positions from a Sobol' sequence.
+
+        Mirrors skopt.Optimizer's own Sobol initialisation exactly: the
+        ``random_state`` option is passed through ``sklearn.utils.
+        check_random_state`` and a single ``randint`` draw from the
+        resulting RandomState seeds ``skopt.sampler.Sobol.generate``
+        (see ``skopt.optimizer.optimizer.Optimizer.__init__``).
+        """
+        from sklearn.utils import check_random_state
+        from skopt.sampler import Sobol
+        from skopt.space import Real
+
+        dimensions = [Real(p.low, p.high) for p in self.parameters]
+        rng = check_random_state(self._random_state)
+        seed = rng.randint(0, np.iinfo(np.int32).max)
+        points = Sobol().generate(dimensions, self.n_particles, random_state=seed)
+        return [np.array(p, dtype=float) for p in points]
 
     def _finalize_init(self) -> None:
         """Transition from init phase to iterate: set up swarm state."""
         self._positions  = np.array(self._iter_results_x, dtype=float)
         self._pbest_x    = self._positions.copy()
         self._pbest_y    = np.array(self._iter_results_y, dtype=float)
-        self._velocities = self._rng.uniform(
-            -self._v_max, self._v_max, (self.n_particles, self.n_dim)
-        )
+        self._velocities = np.zeros((self.n_particles, self.n_dim))
         best_idx       = int(np.argmin(self._pbest_y))
         self._gbest_x  = self._pbest_x[best_idx].copy()
         self._gbest_y  = float(self._pbest_y[best_idx])
@@ -719,10 +775,22 @@ class ParticleSwarmOptimizer:
     # ------------------------------------------------------------------ #
 
     def test_config(self) -> None:
+        if self.n_dim < 1:
+            raise ValueError("pso requires at least one parameter.")
         if self.n_particles < 2:
             raise ValueError(f"n_particles must be >= 2, got {self.n_particles}.")
+        if self.n_calls % self.n_particles != 0:
+            raise ValueError(
+                f"stopping_criteria.n_calls ({self.n_calls}) must be divisible "
+                f"by n_particles ({self.n_particles}) so swarm iterations use "
+                f"the full evaluation budget."
+            )
         if self.max_iter < 1:
-            raise ValueError(f"max_iter must be >= 1, got {self.max_iter}.")
+            raise ValueError(
+                f"n_calls ({self.n_calls}) must be at least 2 x n_particles "
+                f"({2 * self.n_particles}) to fit the init sweep plus one "
+                f"swarm iteration."
+            )
         if not (0 < self.w_end <= self.w_start <= 1):
             raise ValueError(
                 f"Need 0 < w_end <= w_start <= 1, "
@@ -738,56 +806,8 @@ class ParticleSwarmOptimizer:
             )
         if self.epsilon is not None and self.epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
-
-    # ------------------------------------------------------------------ #
-    # Persistence                                                         #
-    # ------------------------------------------------------------------ #
-
-    def get_state(self) -> dict[str, Any]:
-        return {
-            "phase":            self._phase,
-            "particle_idx":     self._particle_idx,
-            "swarm_iter":       self._swarm_iter,
-            "history_x":        self._history_x,
-            "history_y":        self._history_y,
-            "gbest_history":    self._gbest_history,
-            "positions":        self._positions.tolist()  if self._positions  is not None else None,
-            "velocities":       self._velocities.tolist() if self._velocities is not None else None,
-            "pbest_x":          self._pbest_x.tolist()   if self._pbest_x    is not None else None,
-            "pbest_y":          self._pbest_y.tolist()   if self._pbest_y    is not None else None,
-            "gbest_x":          self._gbest_x.tolist()   if self._gbest_x    is not None else None,
-            "gbest_y":          self._gbest_y,
-            "pending_positions": [p.tolist() for p in self._pending_positions],
-            "iter_results_x":   [x.tolist() for x in self._iter_results_x],
-            "iter_results_y":   self._iter_results_y,
-        }
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._phase        = state.get("phase", "init")
-        self._particle_idx = state.get("particle_idx", 0)
-        self._swarm_iter   = state.get("swarm_iter", 0)
-        self._history_x    = state.get("history_x", [])
-        self._history_y    = state.get("history_y", [])
-        self._gbest_history = state.get("gbest_history", [])
-
-        def _arr(key):
-            v = state.get(key)
-            return np.array(v, dtype=float) if v is not None else None
-
-        self._positions  = _arr("positions")
-        self._velocities = _arr("velocities")
-        self._pbest_x    = _arr("pbest_x")
-        self._pbest_y    = _arr("pbest_y")
-        self._gbest_x    = _arr("gbest_x")
-        self._gbest_y    = state.get("gbest_y", float("inf"))
-
-        self._pending_positions = [
-            np.array(p, dtype=float) for p in state.get("pending_positions", [])
-        ]
-        self._iter_results_x = [
-            np.array(x, dtype=float) for x in state.get("iter_results_x", [])
-        ]
-        self._iter_results_y = state.get("iter_results_y", [])
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
 
 
 # --------------------------------------------------------------------- #
@@ -823,7 +843,13 @@ class HybridNelderMeadBayesOptimizer:
         from skopt.space import Real
         self.bo_options = bo_options or {}
         self.bo_dimensions = [Real(p.low, p.high, name=p.name) for p in self._parameters]
-        self.bo_base_estimator = self.bo_options.get("bayesian_kind", "GP")
+        # Resolve "GP" to the explicitly-built estimator so the BO phase uses
+        # the same kernel/noise/n_restarts settings as every other GP-based
+        # optimizer in this module (see _resolve_bo_base_estimator).
+        self.bo_base_estimator = _resolve_bo_base_estimator(
+            self.bo_options.get("bayesian_kind", "GP"),
+            random_state=self.bo_options.get("random_state", 42),
+        )
         self.bo_random_state = self.bo_options.get("random_state", 42)
 
         # Get BO optimizer
@@ -861,14 +887,22 @@ class HybridNelderMeadBayesOptimizer:
         self._history_x.append(list(x))
         self._history_y.append(float(y))
 
-        if self._phase == "nelder_mead":
+        # Route by evaluation index, not by self._phase: a resumed run replays
+        # its history through tell() without ever calling ask(), so _phase
+        # would still hold its constructor value for every replayed point.
+        if len(self._history_y) <= self.nelder_mead_iterations:
             self._nm_optimizer.tell(x, y)
-            self._bo_optimizer.tell(x, y) # Also tell to bo optimizer; was not initialized
-        elif self._bo_optimizer is not None:
+            # NM deliberately proposes points outside the bounds (no clipping,
+            # see NelderMeadOptimizer), but skopt raises when told a point
+            # outside its space.  Out-of-bounds NM evaluations are therefore
+            # excluded from the BO warm-start history.
+            if all(p.low <= xi <= p.high for xi, p in zip(x, self._parameters)):
+                self._bo_optimizer.tell(x, y)
+        else:
             self._bo_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if self._phase == "nelder_mead":
+        if len(self._history_y) <= self.nelder_mead_iterations:
             return self._nm_optimizer.should_stop()
         return _should_stop(self._history_y, self.epsilon, window=self.window)
 
@@ -881,18 +915,10 @@ class HybridNelderMeadBayesOptimizer:
             )
         if self.epsilon is not None and self.epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
-
-    def get_state(self) -> dict[str, Any]:
-        return {
-            "phase": self._phase,
-            "history_x": self._history_x,
-            "history_y": self._history_y,
-        }
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._phase = state.get("phase", "nelder_mead")
-        self._history_x = state.get("history_x", [])
-        self._history_y = state.get("history_y", [])
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
+        # Validate NM sub-optimizer options by delegating.
+        self._nm_optimizer.test_config()
 
 
 # --------------------------------------------------------------------- #
@@ -927,7 +953,13 @@ class HybridFiniteDifferenceBayesOptimizer:
         from skopt.space import Real
         self.bo_options = bo_options or {}
         self.bo_dimensions = [Real(p.low, p.high, name=p.name) for p in self._parameters]
-        self.bo_base_estimator = self.bo_options.get("bayesian_kind", "GP")
+        # Resolve "GP" to the explicitly-built estimator so the BO phase uses
+        # the same kernel/noise/n_restarts settings as every other GP-based
+        # optimizer in this module (see _resolve_bo_base_estimator).
+        self.bo_base_estimator = _resolve_bo_base_estimator(
+            self.bo_options.get("bayesian_kind", "GP"),
+            random_state=self.bo_options.get("random_state", 42),
+        )
         self.bo_random_state = self.bo_options.get("random_state", 42)
 
         # Get BO optimizer
@@ -963,14 +995,20 @@ class HybridFiniteDifferenceBayesOptimizer:
         self._history_x.append(list(x))
         self._history_y.append(float(y))
 
-        if self._phase == "finite_difference":
+        # Route by evaluation index, not by self._phase (see
+        # HybridNelderMeadBayesOptimizer.tell for the replay rationale).
+        if len(self._history_y) <= self.finite_difference_iterations:
             self._fd_optimizer.tell(x, y)
-            self._bo_optimizer.tell(x, y)  # Also tell BO optimizer; warm-starts it
-        elif self._bo_optimizer is not None:
+            # FD does not enforce bounds, but skopt raises when told a point
+            # outside its space.  Out-of-bounds FD evaluations are therefore
+            # excluded from the BO warm-start history (same guard as NM→BO).
+            if all(p.low <= xi <= p.high for xi, p in zip(x, self._parameters)):
+                self._bo_optimizer.tell(x, y)  # warm-starts the BO phase
+        else:
             self._bo_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if self._phase == "finite_difference":
+        if len(self._history_y) <= self.finite_difference_iterations:
             return self._fd_optimizer.should_stop()
         return _should_stop(self._history_y, self.epsilon, window=self.window)
 
@@ -983,20 +1021,10 @@ class HybridFiniteDifferenceBayesOptimizer:
             )
         if self.epsilon is not None and self.epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
         # Validate FD sub-optimizer options by delegating.
         self._fd_optimizer.test_config()
-
-    def get_state(self) -> dict[str, Any]:
-        return {
-            "phase": self._phase,
-            "history_x": self._history_x,
-            "history_y": self._history_y,
-        }
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._phase = state.get("phase", "finite_difference")
-        self._history_x = state.get("history_x", [])
-        self._history_y = state.get("history_y", [])
 
 
 # --------------------------------------------------------------------- #
@@ -1042,7 +1070,10 @@ class HybridBayesNelderMeadOptimizer:
 
         self._bo_optimizer = SkoptOptimizer(
             dimensions=bo_dimensions,
-            base_estimator=bo_opts.get("bayesian_kind", "GP"),
+            base_estimator=_resolve_bo_base_estimator(
+                bo_opts.get("bayesian_kind", "GP"),
+                random_state=bo_opts.get("random_state", 42),
+            ),
             n_initial_points=n_sobol,
             initial_point_generator="sobol",
             random_state=bo_opts.get("random_state", 42),
@@ -1069,7 +1100,10 @@ class HybridBayesNelderMeadOptimizer:
         """Re-centre NM's initial simplex on the BO best point."""
         if self._nm_seeded:
             return
-        best_idx = int(np.argmin(self._history_y))
+        # Consider only the BO-phase entries so the seed point is identical
+        # whether this runs at the live transition (history == BO phase) or
+        # during a resume replay (history may already contain NM-phase points).
+        best_idx = int(np.argmin(self._history_y[: self.bo_iterations]))
         best_x = list(self._history_x[best_idx])
         self._nm_optimizer._initial_points = self._build_nm_simplex(best_x)
         self._nm_seeded = True
@@ -1086,22 +1120,26 @@ class HybridBayesNelderMeadOptimizer:
         n_dim = len(center)
         bounds = self._nm_optimizer.bounds
 
+        # Uniform startup offset of 0.1 in every dimension (matching
+        # NelderMeadOptimizer._build_initial_simplex), scaled by simplex_scale.
+        offset = 0.1 * scale
+
         def clip(val: float, dim: int) -> float:
             return float(np.clip(val, bounds[dim, 0], bounds[dim, 1]))
 
         if n_dim == 1:
             return [
-                [clip(center[0] - 0.25 * scale, 0)],
-                [clip(center[0] + 0.25 * scale, 0)],
+                [clip(center[0] - offset, 0)],
+                [clip(center[0] + offset, 0)],
             ]
         lower = list(center)
         upper = list(center)
-        lower[0] = clip(center[0] - 0.25 * scale, 0)
-        upper[0] = clip(center[0] + 0.25 * scale, 0)
+        lower[0] = clip(center[0] - offset, 0)
+        upper[0] = clip(center[0] + offset, 0)
         points = [lower, upper]
         for dim in range(1, n_dim):
             pt = list(center)
-            pt[dim] = clip(center[dim] + 0.10 * scale, dim)
+            pt[dim] = clip(center[dim] + offset, dim)
             points.append(pt)
         return points
 
@@ -1122,13 +1160,21 @@ class HybridBayesNelderMeadOptimizer:
         self._history_x.append(list(x))
         self._history_y.append(float(y))
 
-        if self._phase == "bayesian":
+        # Route by evaluation index, not by self._phase: a resumed run replays
+        # its history through tell() without ever calling ask(), so _phase
+        # would still read "bayesian" and NM-phase points — which may lie
+        # outside the bounds — would be fed to skopt, which rejects
+        # out-of-space points with a ValueError.
+        if len(self._history_y) <= self.bo_iterations:
             self._bo_optimizer.tell(x, y)
         else:
+            # No-op if ask() already seeded NM at the live transition;
+            # required when the NM phase is reached during a replay.
+            self._seed_nm_from_bo_best()
             self._nm_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if self._phase == "bayesian":
+        if len(self._history_y) <= self.bo_iterations:
             return _should_stop(self._history_y, self.epsilon, window=self.window)
         return self._nm_optimizer.should_stop()
 
@@ -1143,24 +1189,10 @@ class HybridBayesNelderMeadOptimizer:
             )
         if self.epsilon is not None and self.epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
-
-    # ------------------------------------------------------------------ #
-    # Persistence                                                         #
-    # ------------------------------------------------------------------ #
-
-    def get_state(self) -> dict[str, Any]:
-        return {
-            "phase":     self._phase,
-            "nm_seeded": self._nm_seeded,
-            "history_x": self._history_x,
-            "history_y": self._history_y,
-        }
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._phase     = state.get("phase", "bayesian")
-        self._nm_seeded = state.get("nm_seeded", False)
-        self._history_x = state.get("history_x", [])
-        self._history_y = state.get("history_y", [])
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
+        # Validate NM sub-optimizer options by delegating.
+        self._nm_optimizer.test_config()
 
 
 # --------------------------------------------------------------------- #
@@ -1206,7 +1238,10 @@ class HybridBayesFiniteDifferenceOptimizer:
 
         self._bo_optimizer = SkoptOptimizer(
             dimensions=bo_dimensions,
-            base_estimator=bo_opts.get("bayesian_kind", "GP"),
+            base_estimator=_resolve_bo_base_estimator(
+                bo_opts.get("bayesian_kind", "GP"),
+                random_state=bo_opts.get("random_state", 42),
+            ),
             n_initial_points=n_sobol,
             initial_point_generator="sobol",
             random_state=bo_opts.get("random_state", 42),
@@ -1233,13 +1268,22 @@ class HybridBayesFiniteDifferenceOptimizer:
         """Inject BO best into FD optimizer as starting base, skipping re-evaluation."""
         if self._fd_seeded:
             return
-        best_idx = int(np.argmin(self._history_y))
+        # Consider only the BO-phase entries so the seed point is identical
+        # whether this runs at the live transition (history == BO phase) or
+        # during a resume replay (history may already contain FD-phase points).
+        best_idx = int(np.argmin(self._history_y[: self.bo_iterations]))
         best_x = np.array(self._history_x[best_idx], dtype=float)
         best_y = float(self._history_y[best_idx])
         # Directly set FD internal state so the state machine skips the
         # "evaluate initial point" step and begins probing immediately.
         self._fd_optimizer._base   = best_x
         self._fd_optimizer._base_y = best_y
+        # Also record it in the FD optimizer's own history so the history
+        # reflects the point its state was seeded from.  This is bookkeeping
+        # only: FD's decision logic reads _base/_base_y and _step_history_y;
+        # _history_x/_history_y are just recorded and persisted.
+        self._fd_optimizer._history_x.append(list(best_x))
+        self._fd_optimizer._history_y.append(best_y)
         self._fd_optimizer._start_probing()
         self._fd_seeded = True
 
@@ -1260,13 +1304,19 @@ class HybridBayesFiniteDifferenceOptimizer:
         self._history_x.append(list(x))
         self._history_y.append(float(y))
 
-        if self._phase == "bayesian":
+        # Route by evaluation index, not by self._phase: a resumed run replays
+        # its history through tell() without ever calling ask(), so _phase
+        # would still read "bayesian" for every replayed point.
+        if len(self._history_y) <= self.bo_iterations:
             self._bo_optimizer.tell(x, y)
         else:
+            # No-op if ask() already seeded FD at the live transition;
+            # required when the FD phase is reached during a replay.
+            self._seed_fd_from_bo_best()
             self._fd_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if self._phase == "bayesian":
+        if len(self._history_y) <= self.bo_iterations:
             return _should_stop(self._history_y, self.epsilon, window=self.window)
         return self._fd_optimizer.should_stop()
 
@@ -1281,25 +1331,9 @@ class HybridBayesFiniteDifferenceOptimizer:
             )
         if self.epsilon is not None and self.epsilon <= 0:
             raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
         self._fd_optimizer.test_config()
-
-    # ------------------------------------------------------------------ #
-    # Persistence                                                         #
-    # ------------------------------------------------------------------ #
-
-    def get_state(self) -> dict[str, Any]:
-        return {
-            "phase":     self._phase,
-            "fd_seeded": self._fd_seeded,
-            "history_x": self._history_x,
-            "history_y": self._history_y,
-        }
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._phase     = state.get("phase", "bayesian")
-        self._fd_seeded = state.get("fd_seeded", False)
-        self._history_x = state.get("history_x", [])
-        self._history_y = state.get("history_y", [])
 
 
 # --------------------------------------------------------------------- #
@@ -1329,11 +1363,11 @@ class SkoptGPOptimizer:
     def should_stop(self) -> bool:
         return _should_stop(self._history_y, self.epsilon, window=self.window)
 
-    def get_state(self) -> dict[str, Any]:
-        return {"history_y": self._history_y}
-
-    def set_state(self, state: dict[str, Any]) -> None:
-        self._history_y = state.get("history_y", [])
+    def test_config(self) -> None:
+        if self.epsilon is not None and self.epsilon <= 0:
+            raise ValueError(f"epsilon must be > 0, got {self.epsilon!r}.")
+        if self.window < 1:
+            raise ValueError(f"window must be >= 1, got {self.window!r}.")
 
 
 # --------------------------------------------------------------------- #
@@ -1367,15 +1401,19 @@ def build_optimizer(
     if kind == "skopt_gp":
         from skopt import Optimizer as SkoptOptimizer
         from skopt.space import Real
-        from skopt.learning import GaussianProcessRegressor
-        from skopt.learning.gaussian_process.kernels import Matern
         dimensions = [Real(p.low, p.high, name=p.name) for p in parameters]
+        n_initial = int(opts.get("n_initial", 8))
+        if n_initial < 1:
+            raise ValueError(
+                f"options.n_initial must be >= 1 for skopt_gp, got {n_initial}."
+            )
+        random_state = opts.get("random_state", 42)
         skopt_opt = SkoptOptimizer(
             dimensions=dimensions,
-            base_estimator=GaussianProcessRegressor(kernel=Matern(nu=2.5), n_restarts_optimizer=10,),
-            n_initial_points=opts.get("n_initial", 8),
+            base_estimator=_resolve_bo_base_estimator("GP", random_state=random_state),
+            n_initial_points=n_initial,
             initial_point_generator="sobol",
-            random_state=opts.get("random_state", 42),
+            random_state=random_state,
         )
         opt = SkoptGPOptimizer(skopt_opt, epsilon=eps, window=window)
 
@@ -1383,6 +1421,7 @@ def build_optimizer(
         opt = ParticleSwarmOptimizer(
             parameters,
             options=opts,
+            n_calls=int(optimizer_section.stopping_criteria.get("n_calls", 32)),
             epsilon=eps,
             window=window,
         )
@@ -1446,6 +1485,8 @@ def build_optimizer(
     else:
         raise ValueError(f"Unknown optimizer kind: {kind!r}")
 
+    # Fail fast on invalid options instead of surfacing them mid-run.
+    opt.test_config()
     return opt
 
 
