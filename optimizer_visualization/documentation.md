@@ -230,13 +230,18 @@ results/experiments/optimizer_comparison/
         BO_1D_ph2800/
         NM_1D_ph2800/
         FD_1D_ph2800/
-        PSO_1D_ph2800/
+        PSO_1D_ph2800_p3/   <- PSO particle-count sweep (3/4/5/6 particles)
+        PSO_1D_ph2800_p4/
+        PSO_1D_ph2800_p5/
+        PSO_1D_ph2800_p6/
         NM_BO_1D_ph2800/
         FD_BO_1D_ph2800/
         BO_NM_1D_ph2800/
         BO_FD_1D_ph2800/
     two-param-runs/    <- 2-D cases (geko_csep + geko_cnw)
         BO_2D_ph2800/ ... (same naming pattern)
+        PSO_2D_ph2800/
+        PSO_2D_ph2800_optimized/
 ```
 
 Each experiment folder contains `metadata.csv` (iteration history and scores),
@@ -251,13 +256,46 @@ the best result found.
 
 # 2-D comparison
 .venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --dim 2d
-
-# Use --fake to overlay synthetic curves when CFD results are missing
-.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --fake
 ```
 
-Output PNGs are written to `optimizer_visualization/plots/` with names
-`optimizer_comparison_1d_linear.png`, `optimizer_comparison_1d_log.png`,
-`optimizer_comparison_1d_zoom.png` (and the equivalent `2d_` variants).
-Missing experiment folders are silently skipped so partial result sets still
-produce a valid plot.
+Each run produces six output PNGs in `optimizer_visualization/plots/comparison/<dim>/`.
+All cutoff iterations are named hyperparameters defined at the top of
+`optimizer_comparison.py` (`_CUT_ITER_1D`, `_CUT_ITER_2D`, `_CUT_ITER_1D_STAGE2`,
+`_CUT_ITER_2D_STAGE2`, `_CUT_ITER_1D_PSO`, `_CUT_ITER_2D_PSO`).
+
+**Main comparison** — BO, NM, FD, and all hybrids (`RUNS_1D_BO` / `RUNS_2D_BO`; PSO
+excluded, see below):
+
+| File | Contents |
+|------|----------|
+| `optimizer_comparison_1d_full.png` | All iterations, linear y-scale |
+| `optimizer_comparison_1d_after_iter11.png` | Iterations after the early-phase cutoff (iter > 11 for 1-D, iter > 12 for 2-D) |
+| `optimizer_comparison_1d_after_iter14.png` | Iterations after the "BO swaps to NM/FD" marker (iter > 14 for 1-D, iter > 23 for 2-D) |
+
+**BO-vs-PSO comparison** — BO against the PSO particle-count sweep in 1-D
+(`RUNS_1D_BO_VS_PSO`: 3/4/5/6 particles), or BO against PSO / PSO-optimized in 2-D
+(`RUNS_2D_BO_VS_PSO`):
+
+| File | Contents |
+|------|----------|
+| `optimizer_comparison_1d_vs_pso_full.png` | All iterations, linear y-scale |
+| `optimizer_comparison_1d_vs_pso_after_iter7.png` | Iterations after BO's own sampling phase ends (`_BO_SAMPLING_STOP`); iter > 7 for 1-D, iter > 12 for 2-D |
+| `optimizer_comparison_1d_vs_pso_after_iter28.png` | Iterations after a deeper cutoff (`_CUT_ITER_1D_PSO`/`_CUT_ITER_2D_PSO`); iter > 28 for 1-D, iter > 51 for 2-D |
+
+The "BO swaps to NM/FD" marker is omitted from the BO-vs-PSO plots since none of
+those runs ever swap to NM/FD. Missing experiment folders are silently skipped so
+partial result sets still produce a valid plot.
+
+### Plot elements
+
+Each curve is the **best cost found so far** (monotonically non-increasing).
+Raw per-iteration costs are not shown.  Shorter runs are not prolonged — curves
+end where the experiment ended.  The y-axis is automatically scaled to the range
+of the plotted data (5 % padding on each side), so small differences between
+converged curves are visible.
+
+Each legend entry is suffixed with the argmin parameter value(s) for that run, e.g.
+`Bayesian Opt (GP); Csep=0.886` (1-D) or `Hybrid BO -> FD; Csep=0.888, Cnw=0.513`
+(2-D) — the `geko_csep`/`geko_cnw` values at the iteration with the lowest score.
+This is the global best over the entire run (not just the visible window), so it
+is the same across a comparison's `_full` and `_after_iter*` plots.

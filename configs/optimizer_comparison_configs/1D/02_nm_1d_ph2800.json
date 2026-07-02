@@ -34,7 +34,7 @@
     "optimizer": {
         "kind": "nelder_mead",
         "stopping_criteria": {
-            "n_calls": 20,
+            "n_calls": 21,
             "epsilon": null
         },
         "kind_specific_options": {

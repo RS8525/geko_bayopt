@@ -34,11 +34,11 @@
     "optimizer": {
         "kind": "skopt_gp",
         "stopping_criteria": {
-            "n_calls": 20,
+            "n_calls": 21,
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_initial": 8,
+            "n_initial": 7,
             "random_state": 42
         }
     },

@@ -1,5 +1,5 @@
 {
-    "experiment_id": "PSO_1D_ph2800",
+    "experiment_id": "PSO_2D_ph2800_p10",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -19,7 +19,8 @@
         }
     },
     "parameters": [
-        {"name": "geko_csep", "low": 0.7, "high": 2.5}
+        {"name": "geko_csep", "low": 0.7, "high": 2.5},
+        {"name": "geko_cnw", "low": -2.0, "high": 2.0}
     ],
     "objective": {
         "kind": "gedcp",
@@ -34,17 +35,17 @@
     "optimizer": {
         "kind": "pso",
         "stopping_criteria": {
-            "n_calls": 20,
+            "n_calls": 80,
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_particles": 4,
-            "max_iter": 4,
+            "n_particles": 10,
+            "max_iter": 8,
             "w_start": 0.9,
-            "w_end": 0.4,
+            "w_end": 0.2,
             "c1": 1.5,
             "c2": 1.5,
-            "v_max_frac": 0.2,
+            "v_max_frac": 0.1,
             "random_state": 1
         }
     },
@@ -68,8 +69,8 @@
         "k": 1.0e-5,
         "omega": 1.0e-5
     },
-    "fluent_work_dir": "results/experiments/optimizer_comparison/one-param-runs/PSO_1D_ph2800",
-    "results_dir": "results/experiments/optimizer_comparison/one-param-runs/PSO_1D_ph2800",
+    "fluent_work_dir": "results/experiments/optimizer_comparison/two-param-runs/PSO_2D_ph2800_p10",
+    "results_dir": "results/experiments/optimizer_comparison/two-param-runs/PSO_2D_ph2800_p10",
     "session_strategy": "live",
     "keep_only_best_case_files": true
 }

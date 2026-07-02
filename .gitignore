@@ -65,6 +65,9 @@ results/
 results/*
 !results/ffs_final_runs/
 !results/ffs_final_runs/**
+!results/experiments/
+!results/experiments/optimizer_comparison/
+!results/experiments/optimizer_comparison/**
 data/dns/ffs/*.csv
 
 # FFS plot configs and generated plots

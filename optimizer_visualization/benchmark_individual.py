@@ -5,7 +5,7 @@ Produces one PNG per optimizer — a side-by-side pair of 1-D trajectory
 and 2-D contour plots.  Intended for documentation where each optimizer
 needs its own standalone figure.
 
-Output: optimizer_visualization/plots/<slug>.png  (8 files total)
+Output: optimizer_visualization/plots/individual/<slug>.png  (8 files total)
 
 Run from the project root:
     .venv/Scripts/python.exe optimizer_visualization/benchmark_individual.py
@@ -27,8 +27,8 @@ from _benchmark_core import (
 )
 
 _HERE  = Path(__file__).resolve().parent
-_PLOTS = _HERE / "plots"
-_PLOTS.mkdir(exist_ok=True)
+_PLOTS = _HERE / "plots" / "individual"
+_PLOTS.mkdir(parents=True, exist_ok=True)
 
 
 

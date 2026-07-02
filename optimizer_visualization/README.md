@@ -1,7 +1,8 @@
 # optimizer_visualization
 
 Plotting scripts for the GEKO Bayesian Optimisation project.
-All scripts are run from the **project root** and write their output to `optimizer_visualization/plots/`.
+All scripts are run from the **project root** and write their output under `optimizer_visualization/plots/`:
+`benchmark_individual.py` writes to `plots/individual/`, `optimizer_comparison.py` writes to `plots/comparison/`.
 
 ---
 
@@ -10,11 +11,12 @@ All scripts are run from the **project root** and write their output to `optimiz
 | File | Purpose |
 |---|---|
 | `benchmark_individual.py` | Runs all 8 optimizers on the synthetic test functions and saves a separate PNG per optimizer |
-| `optimizer_comparison.py` | Convergence comparison across all 8 optimizers using **real CFD results** (Periodic Hills Re=2800) |
+| `optimizer_comparison.py` | Convergence comparison across BO/NM/FD/hybrids, plus a dedicated BO-vs-PSO comparison, using **real CFD results** (Periodic Hills Re=2800) |
 | `ot.py` | Standalone convergence plotter for a single real CFD experiment — separate from the optimizer comparison |
 | `_benchmark_core.py` | Shared code imported by the benchmark scripts — do not run directly |
 | `documentation.md` | Presentation notes: what to communicate when showing the plots to executives |
-| `plots/` | All output PNGs land here |
+| `plots/individual/` | PNGs from `benchmark_individual.py` |
+| `plots/comparison/` | PNGs from `optimizer_comparison.py` |
 
 ---
 
@@ -25,7 +27,7 @@ All commands are executed from the **project root** using the project virtual en
 ### Synthetic benchmarks (no CFD required)
 
 ```bash
-# Individual figures  ->  plots/01_bayesian_opt.png ... plots/08_hybrid_bo_fd.png
+# Individual figures  ->  plots/individual/01_bayesian_opt.png ... plots/individual/08_hybrid_bo_fd.png
 .venv/Scripts/python.exe optimizer_visualization/benchmark_individual.py
 ```
 
@@ -35,16 +37,43 @@ Runtime is roughly 1-2 minutes.
 ### Real-results comparison (requires CFD data)
 
 ```bash
-# 1-D results (default) -> plots/optimizer_comparison_1d_{linear,log,zoom}.png
+# 1-D results (default) -> plots/comparison/1d/optimizer_comparison_1d_*.png
 .venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py
 
-# 2-D results -> plots/optimizer_comparison_2d_{linear,log,zoom}.png
+# 2-D results -> plots/comparison/2d/optimizer_comparison_2d_*.png
 .venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --dim 2d
-
-# Overlay synthetic convergence curves when no CFD data is available yet:
-.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --fake
-.venv/Scripts/python.exe optimizer_visualization/optimizer_comparison.py --dim 2d --fake
 ```
+
+Each run produces two sets of plots, both driven entirely by named cutoff constants
+at the top of `optimizer_comparison.py`:
+
+**Main comparison** (`RUNS_1D_BO` / `RUNS_2D_BO` — BO, NM, FD, and all hybrids; PSO
+excluded):
+- **`_full`** — all iterations on a linear y-axis, y-range auto-fitted to the data.
+- **`_after_iter<_CUT_ITER_1D/2D>`** — early iterations removed (iter > 11 for 1-D,
+  iter > 12 for 2-D), i.e. shortly after the "BO sampling stops" marker.
+- **`_after_iter<_CUT_ITER_1D/2D_STAGE2>`** — iterations removed up to the "BO swaps
+  to NM/FD" marker (iter > 14 for 1-D, iter > 23 for 2-D).
+
+**BO-vs-PSO comparison** (`RUNS_1D_BO_VS_PSO` / `RUNS_2D_BO_VS_PSO` — BO against the
+PSO particle-count sweep in 1-D, or BO against PSO/PSO-optimized in 2-D), filenames
+prefixed `_vs_pso_`:
+- **`_full`** — all iterations on a linear y-axis, y-range auto-fitted to the data.
+- **`_after_iter<sampling-stop>`** — cut at the same iteration where BO's own sampling
+  phase ends (`_BO_SAMPLING_STOP`), i.e. iter > 7 for 1-D, iter > 12 for 2-D.
+- **`_after_iter<_CUT_ITER_1D/2D_PSO>`** — cut further in, at iter > 28 (1-D) or
+  iter > 51 (2-D), to compare late-stage convergence.
+
+The "BO swaps to NM/FD" marker is omitted from the BO-vs-PSO plots since none of
+those runs ever swap to NM/FD.
+
+Each legend entry is suffixed with the parameter value(s) at that run's best (argmin)
+point, e.g. `Bayesian Opt (GP); Csep=0.886` in 1-D or
+`Hybrid BO -> FD; Csep=0.888, Cnw=0.513` in 2-D. This is the global best found over
+the whole run, so it's identical across the `_full` and `_after_iter*` variants of a
+given comparison.
+
+Raw per-iteration costs and prolongation dashes are not shown; each curve ends where its experiment ended.
 
 `optimizer_comparison.py` reads `metadata.csv` from:
 - 1-D: `results/experiments/optimizer_comparison/one-param-runs/<experiment_id>/metadata.csv`

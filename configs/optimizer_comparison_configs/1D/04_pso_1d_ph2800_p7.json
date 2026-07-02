@@ -1,5 +1,5 @@
 {
-    "experiment_id": "FD_1D_ph2800",
+    "experiment_id": "PSO_1D_ph2800_p7",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -32,16 +32,20 @@
         }
     },
     "optimizer": {
-        "kind": "finite_differences",
+        "kind": "pso",
         "stopping_criteria": {
-            "n_calls": 21,
+            "n_calls": 42,
             "epsilon": null
         },
         "kind_specific_options": {
-            "step_size": 0.05,
-            "learning_rate": 0.2,
-            "min_step": 1e-5,
-            "max_step": 0.25
+            "n_particles": 7,
+            "max_iter": 6,
+            "w_start": 0.9,
+            "w_end": 0.2,
+            "c1": 1.5,
+            "c2": 1.5,
+            "v_max_frac": 0.1,
+            "random_state": 1
         }
     },
     "mesh": {
@@ -64,8 +68,8 @@
         "k": 1.0e-5,
         "omega": 1.0e-5
     },
-    "fluent_work_dir": "results/experiments/optimizer_comparison/one-param-runs/FD_1D_ph2800",
-    "results_dir": "results/experiments/optimizer_comparison/one-param-runs/FD_1D_ph2800",
+    "fluent_work_dir": "results/experiments/optimizer_comparison/one-param-runs/PSO_1D_ph2800_p7",
+    "results_dir": "results/experiments/optimizer_comparison/one-param-runs/PSO_1D_ph2800_p7",
     "session_strategy": "live",
     "keep_only_best_case_files": true
 }

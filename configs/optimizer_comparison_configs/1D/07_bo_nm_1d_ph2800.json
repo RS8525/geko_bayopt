@@ -34,13 +34,13 @@
     "optimizer": {
         "kind": "hybrid_bayes_nm",
         "stopping_criteria": {
-            "n_calls": 20,
+            "n_calls": 21,
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_initial": 10,
+            "n_initial": 14,
             "bo_options": {
-                "n_initial_sobol": 5,
+                "n_initial_sobol": 7,
                 "random_state": 42
             },
             "nm_options": {

@@ -34,17 +34,17 @@
     "optimizer": {
         "kind": "hybrid_fd_bayes",
         "stopping_criteria": {
-            "n_calls": 20,
+            "n_calls": 21,
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_initial": 9,
+            "n_initial": 7,
             "bo_options": {
                 "random_state": 42
             },
             "fd_options": {
                 "step_size": 0.05,
-                "learning_rate": 0.075,
+                "learning_rate": 0.2,
                 "min_step": 1e-5,
                 "max_step": 0.25
             }
