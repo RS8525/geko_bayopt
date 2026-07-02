@@ -1,7 +1,8 @@
 {
-  "name": "periodic_hills_2800_v1",
+  "name": "periodic_hills_all_coefs_l1",
+  "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l1/plots",
   "simulation": {
-    "path": "results/fluent/periodic_hills_2800_v1/alpha1.0_Re2800_Csep0.8792_Cnw0.4893_Cmix0.1918_Cjet0.8705_Cturb1.9724.ascii",
+    "path": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l1/alpha1.0_Re2800_Csep1.7749_Cnw0.4922_Cmix0.4568_Cjet1.0061_Cturb0.8428.ascii",
     "x": 1,
     "y": 2,
     "fields": {
@@ -11,6 +12,9 @@
       "production-of-k": 4,
       "dissipation": 3
     }
+  },
+  "default": {
+    "path": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l1/alpha1.0_Re2800_geko_default.ascii"
   },
   "dns": {
     "path": "data/dns/periodic_hills/pehill-2800-Re-DNS/dns_avg_Re2800_columnwise_organized.ascii",
@@ -35,11 +39,11 @@
     "x_locations": [
       2.0,
       4.5,
-      8.5
+      8.0
     ],
-    "x_tol": 0.1,
+    "x_tol": 0.05,
     "make_profiles": true,
     "compare_default": true,
-    "include_error": true
+    "normalize_error": false
   }
 }
