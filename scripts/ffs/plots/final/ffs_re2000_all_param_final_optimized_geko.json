@@ -2,7 +2,7 @@
   "name": "ffs_re2000_all_param_final_optimized_geko",
   "output_dir": "results/ffs_final_runs/all_param_runs/ffs_re2000_all_param_final/plots/optimized_geko",
   "simulation": {
-    "path": "results/ffs_final_runs/all_param_runs/ffs_re2000_all_param_final/ffs_Reh2000_Csep0.9735_Cnw0.5497_Cmix-0.133_Cjet0.9453_Cturb1.8603.ascii",
+    "path": "results/ffs_final_runs/all_param_runs/ffs_re2000_all_param_final/ffs_Reh2000_Csep0.9744_Cnw0.455_Cmix-0.1301_Cjet1.0104_Cturb2.1417.ascii",
     "x_column": "x-coordinate",
     "y_column": "y-coordinate",
     "fields": {

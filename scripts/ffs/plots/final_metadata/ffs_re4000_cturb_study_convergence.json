@@ -1,0 +1,23 @@
+{
+  "name": "ffs_re4000_cturb_study_convergence",
+  "title": "Re=4000 C_Turb Study vs All-Parameter Convergence",
+  "output_dir": "results/ffs_final_runs/c_turb_study/ffs_re4000_all_param_cturb05_final/plots/metadata",
+  "output_name": "metadata_convergence_log.png",
+  "y_scale": "log",
+  "y_label": "GEDCP score",
+  "plot_raw_scores": true,
+  "plot_best_so_far": true,
+  "plot_baseline": false,
+  "runs": [
+    {
+      "label": "all-param Cturb>=1.5",
+      "metadata": "results/ffs_final_runs/all_param_runs/ffs_re4000_all_param_final/metadata.csv",
+      "config": "configs/ffs_final/all_param/ffs_re4000_all_param.json"
+    },
+    {
+      "label": "all-param Cturb>=0.5",
+      "metadata": "results/ffs_final_runs/c_turb_study/ffs_re4000_all_param_cturb05_final/metadata.csv",
+      "config": "configs/ffs_final/c_turb_study/ffs_re4000_all_param_cturb05.json"
+    }
+  ]
+}

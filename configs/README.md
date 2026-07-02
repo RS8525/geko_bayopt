@@ -28,4 +28,5 @@ file until a directory containing `pyproject.toml` or `.git` is found.
 | `optimizer_comparison_configs/2D/` | Two-parameter optimizer comparison, periodic hills Re=2800 |
 | `ffs_final/2_param/` | Final FFS two-parameter production runs |
 | `ffs_final/all_param/` | Final FFS five-parameter production runs |
+| `ffs_final/c_turb_study/` | Final FFS five-parameter L2 reruns with `geko_cturb >= 0.5` |
 | `ffs_retired/` | Historical FFS configs, provenance only — do not use |

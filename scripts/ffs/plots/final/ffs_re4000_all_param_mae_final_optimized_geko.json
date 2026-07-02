@@ -2,7 +2,7 @@
   "name": "ffs_re4000_all_param_mae_final_optimized_geko",
   "output_dir": "results/ffs_final_runs/all_param_runs/ffs_re4000_all_param_mae_final/plots/optimized_geko",
   "simulation": {
-    "path": "results/ffs_final_runs/all_param_runs/ffs_re4000_all_param_mae_final/ffs_Reh4000_Csep1.1725_Cnw0.5137_Cmix0.493_Cjet0.9775_Cturb1.5.ascii",
+    "path": "results/ffs_final_runs/all_param_runs/ffs_re4000_all_param_mae_final/ffs_Reh4000_Csep1.4336_Cnw0.5089_Cmix1_Cjet0.9853_Cturb1.5.ascii",
     "x_column": "x-coordinate",
     "y_column": "y-coordinate",
     "fields": {

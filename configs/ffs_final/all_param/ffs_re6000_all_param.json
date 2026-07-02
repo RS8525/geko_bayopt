@@ -1,4 +1,4 @@
-﻿{
+{
   "experiment_id": "ffs_re6000_all_param_final",
   "case": {
     "kind": "ffs",
@@ -35,7 +35,7 @@
     {
       "name": "geko_cjet",
       "low": 0,
-      "high": 2
+      "high": 1.2
     },
     {
       "name": "geko_cturb",

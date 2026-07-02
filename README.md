@@ -15,6 +15,10 @@ pip install -e ".[dev]"
 geko-opt run configs/periodic_hills_csep.json
 ```
 
+## FFS Final Runs
+
+Final forward-facing-step production configs live under `configs/ffs_final/`.
+
 ## DNS Data
 
 Download from: https://github.com/xiaoh/para-database-for-PIML
