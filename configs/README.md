@@ -30,3 +30,4 @@ file until a directory containing `pyproject.toml` or `.git` is found.
 | `ffs_final/all_param/` | Final FFS five-parameter production runs |
 | `ffs_final/c_turb_study/` | Final FFS five-parameter L2 reruns with `geko_cturb >= 0.5` |
 | `ffs_retired/` | Historical FFS configs, provenance only — do not use |
+| `periodic_hills_2800/` | Periodic-hill Re=2800 configs: L1 and L2 norms and a finer-mesh case used as the base for `scripts/mesh_validation.py` |
