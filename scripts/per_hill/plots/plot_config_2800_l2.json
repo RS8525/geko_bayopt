@@ -1,0 +1,49 @@
+{
+  "name": "periodic_hills_all_coefs_l2",
+  "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2/plots",
+  "simulation": {
+    "path": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2/alpha1.0_Re2800_Csep1.7686_Cnw0.4919_Cmix0.2256_Cjet0.8394_Cturb0.7069.ascii",
+    "x": 1,
+    "y": 2,
+    "fields": {
+      "Ux": 8,
+      "Uy": 7,
+      "turb-kinetic-energy": 5,
+      "production-of-k": 4,
+      "dissipation": 3
+    }
+  },
+  "default": {
+    "path": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2/alpha1.0_Re2800_geko_default.ascii"
+  },
+  "dns": {
+    "path": "data/dns/periodic_hills/pehill-2800-Re-DNS/dns_avg_Re2800_columnwise_organized.ascii",
+    "x": 1,
+    "y": 2,
+    "fields": {
+      "Ux": 3,
+      "Uy": 4,
+      "turb-kinetic-energy": 9,
+      "production-of-k": 6,
+      "dissipation": 7
+    }
+  },
+  "plots": {
+    "fields": [
+      "Ux",
+      "Uy",
+      "turb-kinetic-energy",
+      "production-of-k",
+      "dissipation"
+    ],
+    "x_locations": [
+      2.0,
+      4.5,
+      8.0
+    ],
+    "x_tol": 0.05,
+    "make_profiles": true,
+    "compare_default": true,
+    "normalize_error": false
+  }
+}

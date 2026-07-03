@@ -2,11 +2,11 @@
 Mesh sensitivity study: DNS error across mesh levels.
 Warning: this test runs multiple Fluent simulations and mesh creation processes, which may crash sometimes.
 Consider adjusting SLEEP_AFTER_FAILURE SLEEP_BETWEEN_MESHES SLEEP_BETWEEN_SOLVERS according to your system's performance
+Also consider lowering the residuals in the config JSON if considerable oscilations were produced
 
 1. Study settings (GEKO params, mesh levels, output dir, ...) are read from a JSON
    file in scripts/mesh_validation/configs/. Pick which one with:
        python mesh_validation.py <config_name.json>
-   (defaults to DEFAULT_STUDY_CONFIG below if no argument is given).
 2. Phase 1: generate all meshes.
 3. Phase 2: run Fluent + compute DNS error for each mesh.
 4. Save CSV and plots.
