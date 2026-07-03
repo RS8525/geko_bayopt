@@ -48,7 +48,7 @@ Notes.md
 
 # External/raw datasets
 data/raw/
-data/dns/periodic_hills/
+data/dns/periodic_hills/**/*.csv
 data/dns/ffs/
 external/
 data/dns/ffs/FFS_Reh6000_SBES_Node
