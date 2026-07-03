@@ -1,0 +1,18 @@
+{
+    "config_file": "configs/periodic_hills_2800/periodic_hills_finner_mesh.json",
+    "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_finner_mesh/mesh_sensitivity",
+
+    "geko_params": {
+        "geko_csep": 1.943404573,
+        "geko_cnw": 0.483582511,
+        "geko_cmix": 0.1992696241,
+        "geko_cturb": 0.6406338329,
+        "geko_cjet": 0.7814087012
+    },
+
+    "mesh_levels": [-11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4],
+
+    "length_refinement_ratio_base": 1.2,
+
+    "scale_fields": ["min_size", "max_size", "bl_first_layer_height"]
+}

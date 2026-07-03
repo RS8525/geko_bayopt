@@ -6,7 +6,7 @@ Run from the repository root and pass the plotting config explicitly:
 
 This script is controlled by an external JSON configuration file. The JSON defines
 the case name, the simulation file, the DNS file, the column indices for x, y, and
-each plotted field, as well as the plotting options.
+each plotted field, the optional output directory, as well as the plotting options.
 
 
 For each selected field, the script can generate:
@@ -29,10 +29,17 @@ Relevant JSON plotting switches:
     include_error:
         If true, an additional error panel is included in each comparison plot.
         The error is computed after interpolating DNS/default values onto the simulation grid.
+        For each field, error panels share one symmetric color scale across
+        simulation/default comparisons.
+
+    normalize_error:
+        If true (default), error panels show (simulation - reference) / std(reference)
+        so fields with different units/magnitudes can share a meaningful scale.
 
 Ex.
 {
   "name": "periodic_hills_2800_v1",
+  "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_csep_cnw_cmix_cturb/plots",
   "simulation": {
     "path": "results/fluent/periodic_hills_2800_v1/alpha1.0_Re2800_Csep0.8792_Cnw0.4893_Cmix0.1918_Cjet0.8705_Cturb1.9724.ascii",
     "x": 1,
@@ -73,7 +80,8 @@ Ex.
     "x_tol": 0.1,
     "make_profiles": true,
     "compare_default": true,
-    "include_error": true
+    "include_error": true,
+    "normalize_error": true
   }
 }
 
@@ -100,14 +108,7 @@ REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )
 DEFAULT_CONFIG_PATH = os.path.join(
-    REPO_ROOT, "scripts", "per_hill", "plots", "plot_config.json"
-)
-DEFAULT_SOLUTION_PATH = os.path.join(
-    REPO_ROOT,
-    "results",
-    "fluent",
-    "periodic_hills_2800_v1",
-    "alpha1.0_Re2800_geko_default.ascii",
+    REPO_ROOT, "scripts", "per_hill", "plots", "plot_config_2800.json"
 )
 
 
@@ -203,13 +204,24 @@ def load_sim_data(sim_cfg):
     return out
 
 
-def make_default_cfg(sim_cfg):
-    return {
-        "path": DEFAULT_SOLUTION_PATH,
+def build_default_cfg(cfg, sim_cfg, compare_default):
+    if not compare_default:
+        return None
+
+    default_cfg = cfg.get("default")
+    if default_cfg is None or not default_cfg.get("path"):
+        raise ValueError(
+            "plots.compare_default is true, so the JSON must define "
+            'a top-level "default" block with a "path" entry.'
+        )
+
+    merged = {
         "x": sim_cfg["x"],
         "y": sim_cfg["y"],
         "fields": sim_cfg["fields"],
     }
+    merged.update(default_cfg)
+    return merged
 
 
 def interpolate_reference_to_sim_grid(ref_x, ref_y, ref_values, sim_x, sim_y):
@@ -224,24 +236,82 @@ def interpolate_reference_to_sim_grid(ref_x, ref_y, ref_values, sim_x, sim_y):
     return ref_on_sim
 
 
-def save_error_plot(ref_label, ref, sim, field, filepath):
-    """Calculate error using interpolation, then plot with old plot_field()."""
+def _safe_std(values):
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return 1.0
+    std = float(np.std(finite))
+    return max(std, 1e-8)
+
+
+def calculate_error_field(ref, sim, field, *, normalize=True):
+    """Return simulation-reference error on the simulation grid.
+
+    When normalize=True, the signed error is divided by the standard
+    deviation of the interpolated reference field. This mirrors the field
+    objective's DNS-standard-deviation normalization and makes different
+    fields comparable on one color scale.
+    """
     ref_on_sim = interpolate_reference_to_sim_grid(
         ref["x"], ref["y"], ref[field],
         sim["x"], sim["y"],
     )
     error = sim[field] - ref_on_sim
+    if normalize:
+        error = error / _safe_std(ref_on_sim)
+    return error
 
-    emax = np.nanmax(np.abs(error))
+
+def common_error_limits_by_field(comparisons, fields, *, normalize=True):
+    """Find one symmetric color limit per field across requested comparisons."""
+    limits = {}
+    for field in fields:
+        maxima = []
+        for ref, sim in comparisons:
+            error = calculate_error_field(ref, sim, field, normalize=normalize)
+            finite_abs = np.abs(error[np.isfinite(error)])
+            if finite_abs.size:
+                maxima.append(float(np.max(finite_abs)))
+
+        if not maxima:
+            limits[field] = 1e-12
+            continue
+        limit = max(maxima)
+        limits[field] = limit if np.isfinite(limit) and limit > 0.0 else 1e-12
+    return limits
+
+
+def save_error_plot(
+    ref_label,
+    ref,
+    sim,
+    field,
+    filepath,
+    *,
+    error_limit=None,
+    normalize=True,
+):
+    """Calculate error using interpolation, then plot with old plot_field()."""
+    error = calculate_error_field(ref, sim, field, normalize=normalize)
+
+    emax = error_limit
+    if emax is None:
+        finite_abs = np.abs(error[np.isfinite(error)])
+        emax = float(np.max(finite_abs)) if finite_abs.size else 1e-12
     if not np.isfinite(emax) or emax == 0.0:
         emax = 1e-12
 
+    label = (
+        f"{field} normalized difference"
+        if normalize
+        else f"{field} difference"
+    )
     save_field_plot(
         sim["x"],
         sim["y"],
         error,
         title=f"{ref_label} {field}",
-        label=f"{field} difference",
+        label=label,
         filepath=filepath,
         cmap="coolwarm",
         vmin=-emax,
@@ -297,6 +367,8 @@ def save_comparison_list(
     layout="horizontal",
     vmin=None,
     vmax=None,
+    error_limit=None,
+    normalize_error=True,
 ):
     
     if vmin is None:
@@ -334,7 +406,15 @@ def save_comparison_list(
 
         if include_error:
             err_path = tmp / f"03_error_{field}.png"
-            save_error_plot(f"Error {sim_label} - DNS", ref, sim, field, err_path)
+            save_error_plot(
+                f"Error {sim_label} - DNS",
+                ref,
+                sim,
+                field,
+                err_path,
+                error_limit=error_limit,
+                normalize=normalize_error,
+            )
             image_paths.append(err_path)
 
         stitch_images(image_paths, output_path, layout=layout)
@@ -473,26 +553,37 @@ def main():
         "config",
         nargs="?",
         default=DEFAULT_CONFIG_PATH,
-        help="Path to JSON config. Default: scripts/per_hill/plots/plot_config.json",
+        help="Path to JSON config. Default: scripts/per_hill/plots/plot_config_2800.json",
     )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
 
-    output_directory = Path(
-        os.path.abspath(
-            os.path.join(REPO_ROOT, "results", "experiments", cfg["name"], "plots")
-        )
-    )
+    output_dir = cfg.get("output_dir")
+    if output_dir is not None:
+        output_directory = Path(repo_path(output_dir))
+    else:
+        results_dir = cfg.get("results_dir")
+        if results_dir is None:
+            case_name = cfg.get("name", cfg.get("experiment_id", "unknown"))
+            results_dir = os.path.join("results", "experiments", case_name)
+        output_directory = Path(repo_path(results_dir)) / "plots"
+
     output_directory.mkdir(parents=True, exist_ok=True)
+    simulation_directory = output_directory / "simulation"
+    default_directory = output_directory / "default"
+    profiles_directory = output_directory / "profiles"
+    simulation_directory.mkdir(parents=True, exist_ok=True)
+    default_directory.mkdir(parents=True, exist_ok=True)
+    profiles_directory.mkdir(parents=True, exist_ok=True)
 
     sim_cfg = cfg["simulation"]
     dns_cfg = cfg["dns"]
     plots_cfg = cfg["plots"]
     fields = plots_cfg["fields"]
 
-    default_cfg = make_default_cfg(sim_cfg)
     compare_default = bool(plots_cfg.get("compare_default", False))
+    default_cfg = build_default_cfg(cfg, sim_cfg, compare_default)
     include_error = bool(plots_cfg.get("include_error", True))
     make_profiles = bool(plots_cfg.get("make_profiles", bool(plots_cfg.get("x_locations", []))))
     layout = plots_cfg.get("comparison_layout", "horizontal")
@@ -500,9 +591,20 @@ def main():
     dns = load_dns_data(dns_cfg)
     sim = load_sim_data(sim_cfg)
     default = load_sim_data(default_cfg) if compare_default else None
+    normalize_error = bool(plots_cfg.get("normalize_error", True))
+    error_limits = {}
+    if include_error:
+        error_comparisons = [(dns, sim)]
+        if compare_default and default is not None:
+            error_comparisons.append((dns, default))
+        error_limits = common_error_limits_by_field(
+            error_comparisons,
+            fields,
+            normalize=normalize_error,
+        )
 
     for field in fields:
-        compare_path = output_directory / f"Sim_DNS_{cfg['name']}_{field}.png"
+        compare_path = simulation_directory / f"Sim_DNS_{cfg['name']}_{field}.png"
         save_comparison_list(
             case_name=cfg["name"],
             field=field,
@@ -513,11 +615,13 @@ def main():
             output_path=compare_path,
             include_error=include_error,
             layout=layout,
+            error_limit=error_limits.get(field),
+            normalize_error=normalize_error,
         )
         print(f"Saved: {compare_path}")
 
         if compare_default:
-            compare_default_path = output_directory / f"Default_DNS_{cfg['name']}_{field}.png"
+            compare_default_path = default_directory / f"Default_DNS_{cfg['name']}_{field}.png"
             save_comparison_list(
                 case_name=cfg["name"],
                 field=field,
@@ -528,6 +632,8 @@ def main():
                 output_path=compare_default_path,
                 include_error=include_error,
                 layout=layout,
+                error_limit=error_limits.get(field),
+                normalize_error=normalize_error,
             )
             print(f"Saved: {compare_default_path}")
 
@@ -544,7 +650,7 @@ def main():
             dns=dns_df,
             sim_cfg=sim_cfg,
             dns_cfg=dns_cfg,
-            output_dir=output_directory,
+            output_dir=profiles_directory,
             tol=plots_cfg["x_tol"],
             default=default_df if compare_default else None,
             default_cfg=default_cfg if compare_default else None,
