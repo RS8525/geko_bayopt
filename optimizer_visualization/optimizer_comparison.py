@@ -27,7 +27,7 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()   # project root
 # where BO hands off to NM/FD. Values differ by dimension because the BO
 # hybrid configs use different n_initial_sobol / n_initial per dimension
 # (see configs/optimizer_comparison_configs/{1D,2D}/07_*.json, 08_*.json).
-_BO_SAMPLING_STOP = {"1d": 7, "2d": 12}
+_BO_SAMPLING_STOP = {"1d": 7, "2d": 13}
 _BO_SWAP_ITER = {"1d": 14, "2d": 23}
 
 # Main comparison: BO, NM, FD, and all hybrids. PSO is excluded here and
@@ -47,9 +47,9 @@ RUNS_1D_BO = [
 RUNS_1D_BO_VS_PSO = [
     ("BO_1D_ph2800",     "Bayesian Opt (GP)"),
     ("PSO_1D_ph2800_p3", "Particle Swarm; 3 particles"),
-    ("PSO_1D_ph2800_p4", "Particle Swarm; 4 particles"),
     ("PSO_1D_ph2800_p5", "Particle Swarm; 5 particles"),
-    ("PSO_1D_ph2800_p6", "Particle Swarm; 6 particles"),
+    ("PSO_1D_ph2800_p7", "Particle Swarm; 7 particles"),
+    ("PSO_1D_ph2800_p9", "Particle Swarm; 9 particles"),
 ]
 
 RUNS_2D_BO = [
@@ -63,9 +63,10 @@ RUNS_2D_BO = [
 ]
 
 RUNS_2D_BO_VS_PSO = [
-    ("BO_2D_ph2800",            "Bayesian Opt (GP)"),
-    ("PSO_2D_ph2800",           "Particle Swarm"),
-    ("PSO_2D_ph2800_optimized", "Particle Swarm optimized"),
+    ("BO_2D_ph2800",        "Bayesian Opt (GP)"),
+    ("PSO_2D_ph2800_p10",   "Particle Swarm; 10 particles"),
+    ("PSO_2D_ph2800_p15",   "Particle Swarm; 15 particles"),
+    ("PSO_2D_ph2800_p20",   "Particle Swarm; 20 particles"),
 ]
 
 _TITLES = {
@@ -91,14 +92,14 @@ _PARAM_DISPLAY_NAMES = {
 
 # Iterations <= this value are excluded from the "after_iter<N>" plot
 # (stage 1 -- shortly after BO sampling stops).
-_CUT_ITER_1D = 11
-_CUT_ITER_2D = _BO_SAMPLING_STOP["2d"]  # 12
+_CUT_ITER_1D = _BO_SAMPLING_STOP["1d"]
+_CUT_ITER_2D = _BO_SAMPLING_STOP["2d"]
 
 # Iterations <= this value are excluded from the "after_iter<N>" plot
 # (stage 2 -- everything after the BO -> NM/FD swap). Reuses _BO_SWAP_ITER
 # since that is exactly where the second vertical line sits.
 _CUT_ITER_1D_STAGE2 = _BO_SWAP_ITER["1d"]
-_CUT_ITER_2D_STAGE2 = _BO_SWAP_ITER["2d"]  # 23
+_CUT_ITER_2D_STAGE2 = _BO_SWAP_ITER["2d"]
 
 # Second cutoff for the dedicated BO-vs-PSO plots (the first cutoff reuses
 # _BO_SAMPLING_STOP directly, since that is exactly where BO's own sampling
@@ -132,12 +133,13 @@ _RUN_COLORS = {
     "Nelder-Mead":        "#e6550d",  # orange
     "Hybrid NM -> BO":    "#fdae6b",  # light orange
 
-    "Particle Swarm; 3 particles": "#fdd0a2",
-    "Particle Swarm; 4 particles": "#fdae6b",
-    "Particle Swarm; 5 particles": "#f16913",
-    "Particle Swarm; 6 particles": "#a63603",
-    "Particle Swarm":              "#fd8d3c",
-    "Particle Swarm optimized":    "#8c2d04",
+    "Particle Swarm; 3 particles":  "#fdd0a2",
+    "Particle Swarm; 5 particles":  "#fdae6b",
+    "Particle Swarm; 7 particles":  "#f16913",
+    "Particle Swarm; 9 particles":  "#a63603",
+    "Particle Swarm; 10 particles": "#fdae6b",
+    "Particle Swarm; 15 particles": "#f16913",
+    "Particle Swarm; 20 particles": "#a63603",
 }
 
 
@@ -147,6 +149,10 @@ _RUN_COLORS = {
 
 def _load_scores(experiment_id: str, dim: str) -> tuple[np.ndarray, list[dict[str, float]]] | None:
     """Return (scores, param_rows) from metadata.csv, or None if absent.
+
+    Only trial_role == "optimizer" rows are returned: metadata.csv starts with
+    a baseline row (GEKO-default run) that is not an optimizer iteration --
+    including it would shift every curve by one and misalign the phase markers.
 
     param_rows[i] holds the parameter values (see _PARAM_COLS) for scores[i],
     used to report the argmin parameter values in the legend.
@@ -165,6 +171,8 @@ def _load_scores(experiment_id: str, dim: str) -> tuple[np.ndarray, list[dict[st
     param_rows = []
     with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
+            if row["trial_role"] != "optimizer":
+                continue
             scores.append(float(row["score"]))
             param_rows.append({c: float(row[c]) for c in cols})
     return (np.array(scores), param_rows) if scores else None
@@ -257,7 +265,7 @@ def plot_comparison_full(dim: str, runs: list[tuple[str, str]], slug: str = "",
 
 
 def plot_comparison_cut(dim: str, runs: list[tuple[str, str]], cut_iter: int, slug: str = "",
-                         show_swap_marker: bool = True) -> None:
+                         show_swap_marker: bool = True, title: str | None = None) -> None:
     """Same as plot_comparison_full but omits all iterations <= cut_iter."""
     fig, ax = plt.subplots(figsize=(10, 5))
     loaded = _load_runs(runs, dim)
@@ -284,7 +292,7 @@ def plot_comparison_cut(dim: str, runs: list[tuple[str, str]], cut_iter: int, sl
     ax.set_xlim(cut_iter + 0.5, max_iters + 0.5)
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Best cost so far")
-    ax.set_title(_TITLES[dim] + f" (from iter {cut_iter + 1})")
+    ax.set_title((title or _TITLES[dim]) + f" (from iter {cut_iter + 1})")
     ax.legend(loc="upper right", fontsize=9)
     ax.grid(True, alpha=0.3)
 
@@ -327,4 +335,16 @@ if __name__ == "__main__":
     # "BO swaps to NM/FD" marker doesn't apply.
     plot_comparison_full(dim, runs_pso, slug="vs_pso_", show_swap_marker=False)
     plot_comparison_cut(dim, runs_pso, cut_iter=_BO_SAMPLING_STOP[dim], slug="vs_pso_", show_swap_marker=False)
-    plot_comparison_cut(dim, runs_pso, cut_iter=cut_iter_pso, slug="vs_pso_", show_swap_marker=False)
+
+    # Stage-2 PSO cut: in 1-D the cut (28) lies past BO's 21-eval budget, so
+    # BO would drop out of the figure anyway -- plot the PSO runs alone under
+    # a "pso_only" slug/title to make that explicit. In 2-D BO survives the
+    # cut (51 < 70), so it stays a BO-vs-PSO plot.
+    if dim == "1d":
+        runs_pso_tail = [(exp_id, label) for exp_id, label in runs_pso
+                         if not exp_id.startswith("BO_")]
+        plot_comparison_cut(dim, runs_pso_tail, cut_iter=cut_iter_pso, slug="pso_only_",
+                            show_swap_marker=False,
+                            title="PSO Particle-Count Comparison - Periodic Hills Re=2800, 1D (geko_csep)")
+    else:
+        plot_comparison_cut(dim, runs_pso, cut_iter=cut_iter_pso, slug="vs_pso_", show_swap_marker=False)

@@ -39,13 +39,12 @@
         },
         "kind_specific_options": {
             "n_particles": 5,
-            "max_iter": 8,
             "w_start": 0.9,
             "w_end": 0.2,
             "c1": 1.5,
             "c2": 1.5,
             "v_max_frac": 0.1,
-            "random_state": 1
+            "random_state": 42
         }
     },
     "mesh": {

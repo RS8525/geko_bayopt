@@ -41,7 +41,7 @@
         "kind_specific_options": {
             "n_initial": 23,
             "bo_options": {
-                "n_initial_sobol": 12,
+                "n_initial_sobol": 13,
                 "random_state": 42
             },
             "nm_options": {

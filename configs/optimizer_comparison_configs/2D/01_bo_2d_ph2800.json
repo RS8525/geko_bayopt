@@ -39,7 +39,7 @@
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_initial": 12,
+            "n_initial": 13,
             "random_state": 42
         }
     },

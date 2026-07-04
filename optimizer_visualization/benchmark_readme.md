@@ -116,11 +116,19 @@ steepness (Lipschitz constant of the gradient):
 
 ### Boundary handling
 
-When a gradient step or Nelder–Mead reflection proposes a parameter value outside
-the valid bounds, the point is **clipped to the nearest boundary** before evaluation.
-This is a practical workaround; physically, it means the optimizer effectively
-evaluates the boundary point rather than the intended point.  Better alternatives
-(reflection into the domain, backtracking line search) are under consideration.
+Neither Finite Differences nor Nelder-Mead clip proposals to the parameter bounds:
+every suggested point (a gradient step, a probe, a simplex reflection/expansion/
+contraction) is evaluated exactly where proposed, even when that lies outside the
+nominal range. This is a deliberate, resolved decision, not an oversight — an
+earlier version clipped to the nearest boundary, which caused two problems: (a)
+persistent re-evaluation of the same boundary point whenever a step or reflection
+kept landing out of bounds (a "boundary limit cycle"), and (b) a mismatch between
+the point the optimizer *thought* it evaluated and the point actually scored.
+Comparisons are meant to expose this kind of boundary behavior, not mask it: the
+walk may briefly wander outside the bounds, the objective returns a poor score
+there, and the optimizer retreats naturally. PSO is the only exception, and not
+because of clipping — its absorption rule (particle pinned to the bound, that
+velocity component zeroed) is part of the PSO algorithm itself.
 
 ---
 
@@ -208,9 +216,10 @@ of the optimum location.
    explore broadly (BO, PSO, or hybrids where BO runs first) reliably find the
    global minimum at x ≈ 3.19.
 
-4. **Boundary clipping:** out-of-bounds suggestions are silently pinned to the
-   boundary.  The gold star and annotation reflect the best clipped value, not
-   the intended step.
+4. **No boundary clipping:** FD and NM evaluate proposals exactly where suggested,
+   even outside the nominal bounds (see "Boundary handling" above). The gold star
+   and best-value annotation reflect the actual point found, which may itself lie
+   outside the nominal bounds if that is where the best score occurred.
 
 ---
 
@@ -230,18 +239,19 @@ results/experiments/optimizer_comparison/
         BO_1D_ph2800/
         NM_1D_ph2800/
         FD_1D_ph2800/
-        PSO_1D_ph2800_p3/   <- PSO particle-count sweep (3/4/5/6 particles)
-        PSO_1D_ph2800_p4/
+        PSO_1D_ph2800_p3/   <- PSO particle-count sweep (3/5/7/9 particles)
         PSO_1D_ph2800_p5/
-        PSO_1D_ph2800_p6/
+        PSO_1D_ph2800_p7/
+        PSO_1D_ph2800_p9/
         NM_BO_1D_ph2800/
         FD_BO_1D_ph2800/
         BO_NM_1D_ph2800/
         BO_FD_1D_ph2800/
     two-param-runs/    <- 2-D cases (geko_csep + geko_cnw)
         BO_2D_ph2800/ ... (same naming pattern)
-        PSO_2D_ph2800/
-        PSO_2D_ph2800_optimized/
+        PSO_2D_ph2800_p10/   <- PSO particle-count sweep (10/15/20 particles)
+        PSO_2D_ph2800_p15/
+        PSO_2D_ph2800_p20/
 ```
 
 Each experiment folder contains `metadata.csv` (iteration history and scores),
@@ -268,19 +278,19 @@ excluded, see below):
 
 | File | Contents |
 |------|----------|
-| `optimizer_comparison_1d_full.png` | All iterations, linear y-scale |
-| `optimizer_comparison_1d_after_iter11.png` | Iterations after the early-phase cutoff (iter > 11 for 1-D, iter > 12 for 2-D) |
-| `optimizer_comparison_1d_after_iter14.png` | Iterations after the "BO swaps to NM/FD" marker (iter > 14 for 1-D, iter > 23 for 2-D) |
+| `optimizer_comparison_{1d,2d}_full.png` | All iterations, linear y-scale |
+| `optimizer_comparison_1d_after_iter7.png` / `optimizer_comparison_2d_after_iter13.png` | Iterations after the early-phase cutoff (iter > 7 for 1-D, iter > 13 for 2-D) |
+| `optimizer_comparison_1d_after_iter14.png` / `optimizer_comparison_2d_after_iter23.png` | Iterations after the "BO swaps to NM/FD" marker (iter > 14 for 1-D, iter > 23 for 2-D) |
 
-**BO-vs-PSO comparison** — BO against the PSO particle-count sweep in 1-D
-(`RUNS_1D_BO_VS_PSO`: 3/4/5/6 particles), or BO against PSO / PSO-optimized in 2-D
-(`RUNS_2D_BO_VS_PSO`):
+**BO-vs-PSO comparison** — BO against the PSO particle-count sweep
+(`RUNS_1D_BO_VS_PSO`: 3/5/7/9 particles; `RUNS_2D_BO_VS_PSO`: 10/15/20 particles):
 
 | File | Contents |
 |------|----------|
-| `optimizer_comparison_1d_vs_pso_full.png` | All iterations, linear y-scale |
-| `optimizer_comparison_1d_vs_pso_after_iter7.png` | Iterations after BO's own sampling phase ends (`_BO_SAMPLING_STOP`); iter > 7 for 1-D, iter > 12 for 2-D |
-| `optimizer_comparison_1d_vs_pso_after_iter28.png` | Iterations after a deeper cutoff (`_CUT_ITER_1D_PSO`/`_CUT_ITER_2D_PSO`); iter > 28 for 1-D, iter > 51 for 2-D |
+| `optimizer_comparison_{1d,2d}_vs_pso_full.png` | All iterations, linear y-scale |
+| `optimizer_comparison_1d_vs_pso_after_iter7.png` / `optimizer_comparison_2d_vs_pso_after_iter13.png` | Iterations after BO's own sampling phase ends (`_BO_SAMPLING_STOP`); iter > 7 for 1-D, iter > 13 for 2-D |
+| `optimizer_comparison_2d_vs_pso_after_iter51.png` | Deeper cutoff (`_CUT_ITER_2D_PSO`), iter > 51; BO's larger 2-D budget survives this cut, so BO stays in the plot |
+| `optimizer_comparison_1d_pso_only_after_iter28.png` | Deeper cutoff (`_CUT_ITER_1D_PSO`), iter > 28; this lies past BO's real-CFD 1-D budget (21 evals), so BO has already ended and is dropped entirely — this file shows only the PSO particle-count runs, under a separate `pso_only` slug and title rather than `vs_pso` |
 
 The "BO swaps to NM/FD" marker is omitted from the BO-vs-PSO plots since none of
 those runs ever swap to NM/FD. Missing experiment folders are silently skipped so

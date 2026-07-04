@@ -50,19 +50,24 @@ at the top of `optimizer_comparison.py`:
 **Main comparison** (`RUNS_1D_BO` / `RUNS_2D_BO` — BO, NM, FD, and all hybrids; PSO
 excluded):
 - **`_full`** — all iterations on a linear y-axis, y-range auto-fitted to the data.
-- **`_after_iter<_CUT_ITER_1D/2D>`** — early iterations removed (iter > 11 for 1-D,
-  iter > 12 for 2-D), i.e. shortly after the "BO sampling stops" marker.
+- **`_after_iter<_CUT_ITER_1D/2D>`** — early iterations removed (iter > 7 for 1-D,
+  iter > 13 for 2-D), i.e. shortly after the "BO sampling stops" marker.
 - **`_after_iter<_CUT_ITER_1D/2D_STAGE2>`** — iterations removed up to the "BO swaps
   to NM/FD" marker (iter > 14 for 1-D, iter > 23 for 2-D).
 
 **BO-vs-PSO comparison** (`RUNS_1D_BO_VS_PSO` / `RUNS_2D_BO_VS_PSO` — BO against the
-PSO particle-count sweep in 1-D, or BO against PSO/PSO-optimized in 2-D), filenames
-prefixed `_vs_pso_`:
+PSO particle-count sweep: 3/5/7/9 particles in 1-D, 10/15/20 particles in 2-D),
+filenames prefixed `_vs_pso_`:
 - **`_full`** — all iterations on a linear y-axis, y-range auto-fitted to the data.
 - **`_after_iter<sampling-stop>`** — cut at the same iteration where BO's own sampling
-  phase ends (`_BO_SAMPLING_STOP`), i.e. iter > 7 for 1-D, iter > 12 for 2-D.
+  phase ends (`_BO_SAMPLING_STOP`), i.e. iter > 7 for 1-D, iter > 13 for 2-D.
 - **`_after_iter<_CUT_ITER_1D/2D_PSO>`** — cut further in, at iter > 28 (1-D) or
-  iter > 51 (2-D), to compare late-stage convergence.
+  iter > 51 (2-D), to compare late-stage convergence. In 1-D this cutoff falls past
+  BO's own real-CFD budget (21 evals total), so BO has already finished and would
+  only show a flat trailing line; that file is produced under a separate
+  `_pso_only_` slug (`optimizer_comparison_1d_pso_only_after_iter28.png`) with BO
+  dropped and a dedicated title, instead of as a `_vs_pso_` file. In 2-D, BO's
+  larger budget survives the cut, so it remains a genuine `_vs_pso_` file.
 
 The "BO swaps to NM/FD" marker is omitted from the BO-vs-PSO plots since none of
 those runs ever swap to NM/FD.
