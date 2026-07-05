@@ -49,18 +49,23 @@ a linear valley with a non-smooth floor.
 
 | Optimizer | 1-D evals | 2-D evals |
 |-----------|----------|----------|
-| Bayesian Opt. (GP) | 20 | 36 |
-| Nelder–Mead | 20 | 36 |
-| Finite Differences | 20 | 36 |
-| Particle Swarm | 20 | 36 |
-| Hybrid NM → BO | 20 (10 + 10) | 36 (16 + 20) |
-| Hybrid FD → BO | 20 (9 + 11) | 36 (16 + 20) |
-| Hybrid BO → NM | 20 (10 + 10) | 36 (20 + 16) |
-| Hybrid BO → FD | 20 (10 + 10) | 36 (20 + 16) |
+| Bayesian Opt. (GP) | 24 | 48 |
+| Nelder–Mead | 24 | 48 |
+| Finite Differences | 24 | 48 |
+| Particle Swarm | 24 | 48 |
+| Hybrid NM → BO | 24 (9 + 15) | 48 (15 + 33) |
+| Hybrid FD → BO | 24 (9 + 15) | 48 (15 + 33) |
+| Hybrid BO → NM | 24 (17 + 7) | 48 (32 + 16) |
+| Hybrid BO → FD | 24 (17 + 7) | 48 (32 + 16) |
 
-All optimizers use the same budget: 20 evaluations in 1-D, 36 in 2-D.
-PSO is configured with 4 particles and 8 swarm iterations
-(4 × 9 = 36), which divides evenly so no partial swarm iterations occur.
+All optimizers use the same budget: 24 evaluations in 1-D, 48 in 2-D, with
+`random_state = 42` throughout. Every optimizer with an initialization phase
+uses `n_initial = 9` in 1-D and `n_initial = 15` in 2-D; the BO-first hybrids
+allocate a longer BO phase (17 evals in 1-D, 32 in 2-D) so it covers both the
+Sobol initialization and a model-guided stretch before the hand-off.
+PSO is configured with 4 particles; the swarm-iteration counts are derived
+from the budget: 5 iterations in 1-D (4 × 6 = 24) and 11 in 2-D (4 × 12 = 48),
+which divides evenly so no partial swarm iterations occur.
 
 ---
 
@@ -87,16 +92,16 @@ The Finite Differences optimizer works in cycles:
 2. Probe each parameter dimension individually (perturb by a small step) to
    estimate the gradient — these are **internal evaluations, not optimizer decisions**.
 3. Take one gradient-descent step.
-4. Set the best-seen point as the new base and repeat.
+4. The stepped point becomes the new base and the cycle repeats.
 
 **The "N = … function evals" label counts all function evaluations** including the
 probe evaluations that are internal to the FD algorithm.  Only the base evaluation
 and the gradient-step evaluations are shown as dots in the plot.  As a result, the
-number of visible dots is smaller than the N shown — for example, N = 20 function
-evaluations in 1-D produce 10 visible dots (1 base + 9 gradient steps), because
+number of visible dots is smaller than the N shown: for example, N = 24 function
+evaluations in 1-D produce 12 visible dots (1 base + 11 gradient steps), because
 each gradient-descent step requires 1 additional probe evaluation to estimate the
-derivative in that dimension.  In 2-D, N = 36 function evaluations produce 12 visible
-dots (1 base + 11 gradient steps), because each step requires 2 probe evaluations
+derivative in that dimension.  In 2-D, N = 48 function evaluations produce 16 visible
+dots (1 base + 15 gradient steps), because each step requires 2 probe evaluations
 (one per parameter dimension).
 
 This design is intentional and consistent: the N label reflects the true computational
@@ -107,10 +112,11 @@ cost, while the plot shows only the evaluations that represent actual optimizer 
 The gradient-descent step size (`learning_rate`) must be calibrated to the function's
 steepness (Lipschitz constant of the gradient):
 
-- **1-D:** learning rate = 0.015, derived from the Lipschitz constant L ≈ 67.
+- **1-D:** learning rate = 0.015, chosen below 1/L ≈ 0.019 (Lipschitz constant
+  of the gradient: L = max |f''| ≈ 52 on [0.5, 3.5]).
   FD converges visibly toward the local minimum at x ≈ 0.81.
 - **2-D:** learning rate = 0.015 (same as 1-D).  The `x1` direction has the same
-  Lipschitz constant L ≈ 67, so the rate is equally appropriate.  The `x2` direction
+  Lipschitz constant L ≈ 52, so the rate is equally appropriate.  The `x2` direction
   is piecewise-linear (slope ±3, Hessian = 0 away from the ridge), so the gradient
   step in x₂ is bounded by lr × 3 = 0.045, well within the x₂ range of 0.8.
 
@@ -119,15 +125,17 @@ steepness (Lipschitz constant of the gradient):
 Neither Finite Differences nor Nelder-Mead clip proposals to the parameter bounds:
 every suggested point (a gradient step, a probe, a simplex reflection/expansion/
 contraction) is evaluated exactly where proposed, even when that lies outside the
-nominal range. This is a deliberate, resolved decision, not an oversight — an
-earlier version clipped to the nearest boundary, which caused two problems: (a)
-persistent re-evaluation of the same boundary point whenever a step or reflection
-kept landing out of bounds (a "boundary limit cycle"), and (b) a mismatch between
-the point the optimizer *thought* it evaluated and the point actually scored.
-Comparisons are meant to expose this kind of boundary behavior, not mask it: the
-walk may briefly wander outside the bounds, the objective returns a poor score
-there, and the optimizer retreats naturally. PSO is the only exception, and not
-because of clipping — its absorption rule (particle pinned to the bound, that
+nominal range. This is a deliberate decision, not an oversight. Clipping to the
+nearest boundary would cause persistent re-evaluation of the same boundary point
+whenever a step or reflection keeps landing out of bounds (a "boundary limit
+cycle"), plus a mismatch between the point the optimizer *thinks* it evaluated
+and the point actually scored. Comparisons are meant to expose this kind of
+boundary behavior, not mask it: the walk may wander outside the bounds, the
+objective returns a poor score there, and the optimizer retreats naturally. In
+principle the walk can move far outside the bounds; on real CFD runs the only
+hard limit is the point at which Fluent no longer accepts the coefficient
+values (has not happened in practice yet). PSO is the only exception, and not
+because of clipping: its absorption rule (particle pinned to the bound, that
 velocity component zeroed) is part of the PSO algorithm itself.
 
 ---
@@ -144,7 +152,8 @@ moderate dimensions with smooth objectives but may stagnate in flat regions.
 
 Uses a Gaussian Process surrogate to model the objective and Expected Improvement
 to select the next evaluation point.  Starts with Sobol quasi-random sampling
-(8 points) to build the initial surrogate, then switches to model-guided search.
+(9 points in 1-D, 15 in 2-D) to build the initial surrogate, then switches to
+model-guided search.
 Naturally handles boundaries and multi-modal landscapes.
 
 ---
@@ -155,8 +164,8 @@ A population-based method.  A swarm of particles explores the domain simultaneou
 guided by personal bests and the global best.
 
 Configuration used:
-- 1-D: 4 particles, 4 swarm iterations (20 total function evaluations).
-- 2-D: 4 particles, 8 swarm iterations (36 total function evaluations).
+- 1-D: 4 particles, 5 swarm iterations (24 total function evaluations).
+- 2-D: 4 particles, 11 swarm iterations (48 total function evaluations).
 
 ---
 
@@ -183,8 +192,8 @@ subsequent NM or FD phase can therefore afford to search a smaller neighbourhood
 prioritising exploitation over exploration.
 
 **BO → NM:** The NM startup simplex is built around the BO best point with offsets
-scaled to **60% of the default size** (x₁ offset ±0.15 instead of ±0.25; x₂ offset
-+0.06 instead of +0.10).  This tighter simplex makes NM refine locally rather than
+scaled to **60% of the default size** (offset ±0.06 instead of the uniform ±0.10
+used in every dimension by the default startup simplex).  This tighter simplex makes NM refine locally rather than
 re-exploring the full domain.  Controlled via the `simplex_scale` parameter in
 `nm_options` (default 1.0; set to 0.6 here).
 
@@ -203,12 +212,12 @@ of the optimum location.
 ## Known limitations to flag
 
 1. **FD convergence depends on learning rate calibration.**  The x₁ direction of the
-   2-D test function has Lipschitz constant L ≈ 67; the x₂ direction is piecewise-
+   2-D test function has Lipschitz constant L ≈ 52; the x₂ direction is piecewise-
    linear (non-smooth at x₂ = 0.5).  The standalone FD learning rate 0.015 is
    calibrated to the x₁ direction; the BO→FD rate of 0.009 trades some speed for
    tighter local convergence.
 
-2. **PSO uses the same budget as all other optimizers** (20 evals in 1-D, 36 in 2-D)
+2. **PSO uses the same budget as all other optimizers** (24 evals in 1-D, 48 in 2-D)
    with 4 particles in both cases.
 
 3. **Local vs global minimum (1-D):** gradient-based methods (FD, NM, and their

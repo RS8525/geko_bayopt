@@ -52,12 +52,10 @@ bit-for-bit identically to an uninterrupted run):
 | `hybrid_bayes_nm`    | Exact (both phases). |
 | `hybrid_bayes_fd`    | Exact (both phases). |
 
-There is deliberately no snapshot (`get_state`/`set_state`) API. It existed
-once but was never called anywhere and the hybrid implementations were
-incomplete, so it was removed — resume is always reconstruction-by-replay. If
-snapshot checkpointing is ever needed (e.g. replay becomes too expensive),
-implement it completely for every class, including the sub-optimizer state
-inside the hybrids.
+There is deliberately no snapshot (`get_state`/`set_state`) API: resume is
+always reconstruction-by-replay. If snapshot checkpointing is ever needed
+(e.g. replay becomes too expensive), implement it completely for every class,
+including the sub-optimizer state inside the hybrids.
 
 ### Determinism and seeding
 
@@ -70,9 +68,8 @@ this work for the GP-based ones:
    initial-point sequence between configs with identical `random_state`.
 2. The estimator itself is seeded with the config's `random_state`. With
    sklearn's default `random_state=None`, the L-BFGS restarts of every kernel
-   hyperparameter fit draw from the **global numpy RNG**, which made every
-   model-based proposal irreproducible across runs and resumes (this was a real
-   bug: benchmark reruns produced different trajectories).
+   hyperparameter fit would draw from the **global numpy RNG**, making every
+   model-based proposal irreproducible across runs and resumes.
 
 All five GP construction sites (standalone `skopt_gp` and the four hybrids) go
 through `_resolve_bo_base_estimator`, so every optimizer's BO component uses the
@@ -100,18 +97,21 @@ points one at a time; afterwards each ask/tell cycle performs one NM operation
 
 ### Startup simplex
 
-Built around the hard-coded GEKO defaults
-`(csep=1.75, cnw=0.5, cmix=0.0, cwall=0.9)`, clipped into the bounds (the
-search *starts* in the valid region; only later proposals may wander), with a
-uniform offset of 0.1 in every dimension:
+Built around the canonical GEKO defaults from `geko_defaults.GEKO_DEFAULTS`
+`(csep=1.75, cnw=0.5, cmix=0.0, cjet=1.0, ccorner=1.0, cturb=2.0)`, clipped
+into the bounds (the search *starts* in the valid region; only later proposals
+may wander), with a uniform offset of 0.1 in every dimension:
 
 - 1D: `default ± 0.1` (2 points).
 - ND: `default[0] ± 0.1` plus one point per remaining dimension at
   `default[d] + 0.1` (n_dim+1 points).
 
-**Edge case:** parameters must use the canonical GEKO names — any other name
-raises `KeyError` at construction (intentional; the defaults are the physical
-starting point).
+**Edge case:** parameters must use the canonical GEKO names listed in
+`geko_defaults.GEKO_DEFAULTS` (`geko_csep`, `geko_cnw`, `geko_cmix`,
+`geko_cjet`, `geko_ccorner`, `geko_cturb`). Any other name raises a
+`ValueError` from `defaults_for_parameters` at construction (NM) or at
+build-time validation in `test_config` (FD). Intentional; the defaults are
+the physical starting point.
 
 ### Simplex initialization from history (best + D nearest)
 
@@ -136,13 +136,16 @@ deterministic operation sequence as the original run.
 ### Bounds are deliberately NOT enforced
 
 NM's geometric steps (reflection/expansion/contraction/shrink) can propose
-points outside the parameter bounds. Clipping them internally caused persistent
-resampling: a clipped vertex kept regenerating the same out-of-bounds proposal,
-re-running an identical expensive CFD case forever. Instead, out-of-bounds
-proposals are evaluated as-is; the simulator returns a poor score and the
-simplex retreats naturally. This is now the project-wide policy: **nothing
-clips anywhere** — neither the optimizers (NM, FD) nor the benchmark harness.
-Optimizer comparisons are meant to expose boundary behavior, not mask it.
+points outside the parameter bounds. Clipping them internally would cause
+persistent resampling: a clipped vertex keeps regenerating the same
+out-of-bounds proposal, re-running an identical expensive CFD case forever.
+Instead, out-of-bounds proposals are evaluated as-is; the simulator returns a
+poor score and the simplex retreats naturally. This is the project-wide
+policy: **nothing clips anywhere**, neither the optimizers (NM, FD) nor the
+benchmark harness. Optimizer comparisons are meant to expose boundary
+behavior, not mask it. In principle the walk can wander far outside the
+bounds; the only hard limit is the point at which Fluent no longer accepts
+the coefficient values (has not happened in practice yet).
 
 
 ### Other edge cases
@@ -176,11 +179,11 @@ cycle structure, update `_fd_show_mask` and its offset handling for
 
 ### Unconditional step acceptance (not elitist)
 
-`_process_result` sets the base to whatever the gradient step evaluated to —
+`_process_result` sets the base to whatever the gradient step evaluated to,
 **not** the best point seen so far. This is intentional: probe and step points
 are pure functions of the base, so a "keep best" rule would freeze the base
 whenever a cycle failed to improve, and every later cycle would re-evaluate the
-exact same points forever (a real historical bug). Consequences:
+exact same points forever. Consequences:
 
 - `step_history_y` is not monotonic; never assume the last step improved.
 - Near a smooth optimum the walk settles into a small limit cycle biased by
@@ -196,12 +199,11 @@ clipping. The walk may leave the domain; the objective is evaluated there and
 a poor score steers it back. The bounds are still used to *scale* the probe
 perturbation (`delta = step_size × range`).
 
-This replaced an earlier self-clipping scheme (probe direction flips near the
-upper bound plus `np.clip` on the step), which produced **boundary limit
-cycles**: a step pinned to the bound became the next base and every subsequent
-cycle re-evaluated (nearly) the same boundary points, wasting the eval budget.
-Letting FD wander makes bad boundary behavior *visible* in optimizer
-comparisons instead of silently masking it.
+Clipping would produce **boundary limit cycles**: a step pinned to the bound
+becomes the next base and every subsequent cycle re-evaluates (nearly) the
+same boundary points, wasting the eval budget. Letting FD wander makes bad
+boundary behavior *visible* in optimizer comparisons instead of silently
+masking it.
 
 ### Learning rate
 
@@ -230,8 +232,7 @@ bests and pre-computes all next positions.
   `max_iter = n_calls // n_particles − 1` (init sweep + `max_iter` iterations
   exactly consume the `n_calls` budget). `test_config()` raises unless
   `n_calls` is divisible by `n_particles` and the budget fits at least the
-  init sweep plus one swarm iteration (`n_calls ≥ 2 × n_particles`). A
-  `max_iter` key in `kind_specific_options` is **ignored**.
+  init sweep plus one swarm iteration (`n_calls ≥ 2 × n_particles`).
 - **Inertia:** decays linearly from `w_start` to `w_end`, exactly spanning the
   derived `max_iter`; `_current_w` clamps at `max_iter`, so any extra
   iterations run at `w_end`.

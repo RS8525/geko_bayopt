@@ -119,8 +119,8 @@ PARAMS_2D = [
     ParameterSpec(name="geko_cnw",  low=0.1, high=0.9),
 ]
 
-N_1D = 20   # total function evaluations for 1-D benchmark
-N_2D = 36   # total function evaluations for 2-D benchmark
+N_1D = 24   # total function evaluations for 1-D benchmark
+N_2D = 48   # total function evaluations for 2-D benchmark
 
 # ===========================================================================
 # Optimizer catalogue
@@ -159,9 +159,9 @@ OPTIMIZERS: list[tuple[
         "01_bayesian_opt",
         None, None,
         OptimizerSection(kind="skopt_gp", stopping_criteria=_S1,
-                         kind_specific_options={"n_initial": 8, "random_state": 42}),
+                         kind_specific_options={"n_initial": 9, "random_state": 42}),
         OptimizerSection(kind="skopt_gp", stopping_criteria=_S2,
-                         kind_specific_options={"n_initial": 8, "random_state": 42}),
+                         kind_specific_options={"n_initial": 15, "random_state": 42}),
     ),
 
     (
@@ -191,11 +191,11 @@ OPTIMIZERS: list[tuple[
         # 4 particles, 20 evals → max_iter = 20/4 - 1 = 4 (derived internally)
         OptimizerSection(kind="pso", stopping_criteria=_S1,
                          kind_specific_options={
-                             "n_particles": 4, "random_state": 1}),
+                             "n_particles": 4, "random_state": 42}),
         # 4 particles, 36 evals → max_iter = 36/4 - 1 = 8 (derived internally)
         OptimizerSection(kind="pso", stopping_criteria=_S2,
                          kind_specific_options={
-                             "n_particles": 4, "random_state": 1}),
+                             "n_particles": 4, "random_state": 42}),
     ),
 
     (
@@ -204,13 +204,13 @@ OPTIMIZERS: list[tuple[
         10, 16,
         OptimizerSection(kind="hybrid_nm_bayes", stopping_criteria=_S1,
                          kind_specific_options={
-                             "n_initial": 10,
+                             "n_initial": 9,
                              "bo_options": {"random_state": 42},
                              "nm_options": {},
                          }),
         OptimizerSection(kind="hybrid_nm_bayes", stopping_criteria=_S2,
                          kind_specific_options={
-                             "n_initial": 16,
+                             "n_initial": 15,
                              "bo_options": {"random_state": 42},
                              "nm_options": {},
                          }),
@@ -228,7 +228,7 @@ OPTIMIZERS: list[tuple[
                          }),
         OptimizerSection(kind="hybrid_fd_bayes", stopping_criteria=_S2,
                          kind_specific_options={
-                             "n_initial": 16,
+                             "n_initial": 15,
                              "bo_options": {"random_state": 42},
                              "fd_options": {"step_size": 0.05, "learning_rate": 0.015},
                          }),
@@ -242,13 +242,13 @@ OPTIMIZERS: list[tuple[
         # normal, tightening the search around the BO best point for exploitation.
         OptimizerSection(kind="hybrid_bayes_nm", stopping_criteria=_S1,
                          kind_specific_options={
-                             "n_initial": 10,
-                             "bo_options": {"n_initial_sobol": 5, "random_state": 42},
+                             "n_initial": 17,
+                             "bo_options": {"n_initial_sobol": 9, "random_state": 42},
                              "nm_options": {"simplex_scale": 0.6},
                          }),
         OptimizerSection(kind="hybrid_bayes_nm", stopping_criteria=_S2,
                          kind_specific_options={
-                             "n_initial": 20,
+                             "n_initial": 32,
                              "bo_options": {"n_initial_sobol": 5, "random_state": 42},
                              "nm_options": {"simplex_scale": 0.6},
                          }),
@@ -262,14 +262,14 @@ OPTIMIZERS: list[tuple[
         # to tighten the gradient search around the BO best point for exploitation.
         OptimizerSection(kind="hybrid_bayes_fd", stopping_criteria=_S1,
                          kind_specific_options={
-                             "n_initial": 10,
-                             "bo_options": {"n_initial_sobol": 5, "random_state": 42},
+                             "n_initial": 17,
+                             "bo_options": {"n_initial_sobol": 9, "random_state": 42},
                              "fd_options": {"step_size": 0.03, "learning_rate": 0.009},
                          }),
         OptimizerSection(kind="hybrid_bayes_fd", stopping_criteria=_S2,
                          kind_specific_options={
-                             "n_initial": 20,
-                             "bo_options": {"n_initial_sobol": 5, "random_state": 42},
+                             "n_initial": 32,
+                             "bo_options": {"n_initial_sobol": 15, "random_state": 42},
                              "fd_options": {"step_size": 0.03, "learning_rate": 0.009},
                          }),
     ),

@@ -79,9 +79,9 @@ With the default `window=3`, at least `2 × window = 6` meaningful steps must ha
 
 ### `nelder_mead` — Nelder-Mead Simplex
 
-Self-initializes a startup simplex (D+1 points) around the GEKO defaults `(csep=1.75, cnw=0.5, cmix=0.0, cwall=0.9)`. No `n_initial` needed.
+Self-initializes a startup simplex (D+1 points) around the canonical GEKO defaults from `geko_defaults.py` `(csep=1.75, cnw=0.5, cmix=0.0, cjet=1.0, ccorner=1.0, cturb=2.0)`; only the coefficients actually being tuned are used. No `n_initial` needed.
 
-Parameter bounds are **not enforced** on simplex operations: reflections/expansions may propose points outside the bounds, which are evaluated as-is (a poor score makes the simplex retreat naturally). Clipping proposals caused persistent re-evaluation of identical boundary points.
+Parameter bounds are **not enforced** on simplex operations: reflections/expansions may propose points outside the bounds, which are evaluated as-is (a poor score makes the simplex retreat naturally). In principle the walk can wander far outside the bounds; the only hard limit is the point at which Fluent no longer accepts the coefficient values (has not happened in practice yet).
 
 ```json
 "optimizer": {
@@ -113,7 +113,7 @@ Parameter bounds are **not enforced** on simplex operations: reflections/expansi
 
 ### `finite_differences` — Finite-Difference Gradient Descent
 
-Starts from GEKO defaults, estimates the gradient by perturbing each dimension by `step_size`, then takes a descent step. No `n_initial` needed.
+Starts from the canonical GEKO defaults (`geko_defaults.py`, same lookup as Nelder-Mead), estimates the gradient by perturbing each dimension by `step_size`, then takes a descent step. No `n_initial` needed.
 
 Parameter bounds are **not enforced** on probes or gradient steps (same policy as Nelder-Mead): the walk may leave the bounds and is steered back by poor scores. The bounds are only used to scale the probe perturbation (`delta = step_size × range`).
 
@@ -332,7 +332,7 @@ If a particle overshoots a bound, it is placed on the boundary and its velocity 
 
 `v_max_frac` remains relevant despite the zero-velocity init: it is applied every iteration (not just at init) to clip the velocity computed from the inertia/cognitive/social terms in `_compute_next_positions`, preventing particles from picking up unbounded velocity as they accelerate toward pbest/gbest. Removing the random initial velocity draw does not remove this per-iteration clamp.
 
-The number of swarm iterations is **derived from the evaluation budget** — there is no `max_iter` option. Internally `max_iter = n_calls // n_particles − 1` (the init sweep costs `n_particles` evaluations, each swarm iteration costs `n_particles` more), and the inertia weight decays linearly from `w_start` to `w_end` over exactly those iterations. Validation requires `n_calls` to be divisible by `n_particles` (so iterations use the full budget) and `n_calls ≥ 2 × n_particles` (init sweep plus at least one iteration). A `max_iter` key in `kind_specific_options` is ignored.
+The number of swarm iterations is **derived from the evaluation budget** — there is no `max_iter` option. Internally `max_iter = n_calls // n_particles − 1` (the init sweep costs `n_particles` evaluations, each swarm iteration costs `n_particles` more), and the inertia weight decays linearly from `w_start` to `w_end` over exactly those iterations. Validation requires `n_calls` to be divisible by `n_particles` (so iterations use the full budget) and `n_calls ≥ 2 × n_particles` (init sweep plus at least one iteration).
 
 ```json
 "optimizer": {

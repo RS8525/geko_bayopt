@@ -26,6 +26,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from .config import OptimizerSection, ParameterSpec
+from .geko_defaults import defaults_for_parameters
 
 
 class Optimizer(Protocol):
@@ -342,9 +343,8 @@ class NelderMeadOptimizer:
     def _build_initial_simplex(self) -> list[list[float]]:
         """Build the Nelder-Mead startup simplex around GEKO defaults."""
 
-        all_defaults = { "geko_csep": 1.75, "geko_cnw": 0.5, "geko_cmix": 0.0, "geko_cwall": 0.9 }
-
-        defaults = [all_defaults[parameter.name] for parameter in self.parameters]
+        defaults_map = defaults_for_parameters(self.parameters)
+        defaults = [defaults_map[parameter.name] for parameter in self.parameters]
 
         # Uniform startup offset of 0.1 in every dimension.
         offset = 0.1
@@ -448,12 +448,11 @@ class FiniteDifferenceOptimizer:
         self._probe_deltas: list[float] = []  # actual delta used per dim
         self._probe_y:      list[float] = []  # f(base + delta*e_i) per dim
 
-    _GEKO_DEFAULTS = {"geko_csep": 1.75, "geko_cnw": 0.5, "geko_cmix": 0.0, "geko_cwall": 0.9}
-
     def ask(self) -> list[float]:
         if self._pending_x is None:
+            defaults = defaults_for_parameters(self.parameters)
             self._pending_x = np.clip(
-                [self._GEKO_DEFAULTS[p.name] for p in self.parameters],
+                [defaults[p.name] for p in self.parameters],
                 self.bounds[:, 0], self.bounds[:, 1],
             )
         return list(self._pending_x)
@@ -532,6 +531,10 @@ class FiniteDifferenceOptimizer:
     def test_config(self) -> None:
         if self.n_dim < 1:
             raise ValueError("finite_difference requires at least one parameter.")
+        # Validate parameter names at build time: ask() resolves the starting
+        # base from the canonical GEKO defaults, and hybrid_bayes_fd injects
+        # its own base without ever taking that ask() branch.
+        defaults_for_parameters(self.parameters)
         if self._step_size <= 0:
             raise ValueError(f"options.step_size must be > 0, got {self._step_size!r}.")
         if self._learning_rate <= 0:
