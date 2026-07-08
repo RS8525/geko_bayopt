@@ -50,6 +50,7 @@ Notes.md
 data/raw/
 data/dns/periodic_hills/**/*.csv
 data/dns/ffs/
+data/dns/periodic_hills/
 external/
 data/dns/ffs/FFS_Reh6000_SBES_Node
 !data\dns\ffs\average_z_dns_ffs.py
