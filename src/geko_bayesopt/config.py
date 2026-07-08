@@ -117,8 +117,11 @@ class OptimizerSection(BaseModel):
                   "hybrid_bayes_nm",
                   "pso",
                   ]
+    # epsilon defaults to None (disabled): the uniform best-so-far stopping
+    # check needs a deliberately chosen (epsilon, window) pair -- see the
+    # stopping-criteria discussion in optimizer_report.tex.
     stopping_criteria: dict[str, Any] = {"n_calls": 32,
-                                         "epsilon": 1e-4,
+                                         "epsilon": None,
                                          "window":  3}
     kind_specific_options: dict[str, Any] = Field(default_factory=dict)
 

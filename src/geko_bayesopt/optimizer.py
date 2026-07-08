@@ -54,18 +54,21 @@ def _should_stop(
     *,
     window: int = 3,
 ) -> bool:
-    """Return True when relative improvement over the last ``window`` steps is below epsilon.
+    """Return True when the best-so-far value has not improved by at least
+    ``epsilon`` (relative) over the last ``window`` evaluations.
 
-    Compares the best value in the last ``window`` entries against the best
-    value in all preceding entries.  Requires at least ``2 * window`` entries
-    to avoid spurious early stops at the very beginning.
+    Uniform across all optimizer kinds: ``history_y`` is the raw
+    per-evaluation history, and the check compares the overall best against
+    the best before the last ``window`` evaluations.  Requires more than
+    ``window`` entries so a pre-window best exists; the check can therefore
+    fire at the earliest after ``window + 1`` evaluations.
     """
-    if epsilon is None or len(history_y) < 2 * window:
+    if epsilon is None or len(history_y) <= window:
         return False
-    recent_best = min(history_y[-window:])
-    prior_best  = min(history_y[:-window])
+    prior_best   = min(history_y[:-window])
+    current_best = min(history_y)
     denom = max(abs(prior_best), 1e-10)
-    return abs(recent_best - prior_best) / denom < epsilon
+    return (prior_best - current_best) / denom < epsilon
 
 
 def _resolve_bo_base_estimator(
@@ -157,7 +160,6 @@ class NelderMeadOptimizer:
 
         self._history_x: list[list[float]] = []
         self._history_y: list[float] = []
-        self._iter_best_y: list[float] = []
 
         # Active simplex — None until the startup phase is complete.
         self._simplex_x: list[np.ndarray] | None = None
@@ -251,7 +253,6 @@ class NelderMeadOptimizer:
     def _prepare_reflect(self) -> None:
         """Start a new NM iteration: sort simplex and propose the reflection point."""
         self._sort_simplex()
-        self._iter_best_y.append(self._simplex_y[0])
         self._x0 = self._centroid()
         self._x_r = self._x0 + self._ALPHA * (self._x0 - self._simplex_x[-1])
         self._pending_op = 'reflect'
@@ -373,7 +374,7 @@ class NelderMeadOptimizer:
         return float(np.clip(value, self.bounds[dim, 0], self.bounds[dim, 1]))
 
     def should_stop(self) -> bool:
-        return _should_stop(self._iter_best_y, self.epsilon, window=self.window)
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     def test_config(self) -> None:
         if self.n_dim < 1:
@@ -432,7 +433,6 @@ class FiniteDifferenceOptimizer:
 
         self._history_x: list[list[float]] = []
         self._history_y: list[float] = []
-        self._step_history_y: list[float] = []
 
         self._step_size     = float(self.options.get("step_size",     0.05))
         self._learning_rate = float(self.options.get("learning_rate", 0.2))
@@ -492,7 +492,6 @@ class FiniteDifferenceOptimizer:
             # then probe the exact same points forever.
             self._base   = x.copy()
             self._base_y = y
-            self._step_history_y.append(self._base_y)
             self._start_probing()
 
     def _start_probing(self) -> None:
@@ -526,7 +525,7 @@ class FiniteDifferenceOptimizer:
         return self._base - self._learning_rate * grad
 
     def should_stop(self) -> bool:
-        return _should_stop(self._step_history_y, self.epsilon, window=self.window)
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     def test_config(self) -> None:
         if self.n_dim < 1:
@@ -628,8 +627,6 @@ class ParticleSwarmOptimizer:
         # Full history
         self._history_x: list[list[float]] = []
         self._history_y: list[float] = []
-        # One entry per completed swarm iteration, for the stopping criterion.
-        self._gbest_history: list[float] = []
 
         # Swarm state — None until the init phase completes.
         self._positions:  np.ndarray | None = None   # (n_particles, n_dim)
@@ -685,7 +682,6 @@ class ParticleSwarmOptimizer:
         best_idx       = int(np.argmin(self._pbest_y))
         self._gbest_x  = self._pbest_x[best_idx].copy()
         self._gbest_y  = float(self._pbest_y[best_idx])
-        self._gbest_history.append(self._gbest_y)
 
         self._iter_results_x = []
         self._iter_results_y = []
@@ -740,7 +736,6 @@ class ParticleSwarmOptimizer:
                 self._gbest_y = y
                 self._gbest_x = self._iter_results_x[i].copy()
 
-        self._gbest_history.append(self._gbest_y)
         self._swarm_iter   += 1
         self._iter_results_x = []
         self._iter_results_y = []
@@ -771,7 +766,7 @@ class ParticleSwarmOptimizer:
                 self._finalize_iteration()
 
     def should_stop(self) -> bool:
-        return _should_stop(self._gbest_history, self.epsilon, window=self.window)
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     # ------------------------------------------------------------------ #
     # Validation                                                          #
@@ -822,8 +817,6 @@ class HybridNelderMeadBayesOptimizer:
 
     The first ``nelder_mead_iterations`` evaluations use ``NelderMeadOptimizer``.
     Subsequent calls switch to a skopt GP (warm-started with the NM history).
-    The epsilon stopping check in the BO phase compares the two best observed
-    values (not consecutive iterates).
     """
 
     def __init__(
@@ -905,8 +898,6 @@ class HybridNelderMeadBayesOptimizer:
             self._bo_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if len(self._history_y) <= self.nelder_mead_iterations:
-            return self._nm_optimizer.should_stop()
         return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     def test_config(self) -> None:
@@ -1011,8 +1002,6 @@ class HybridFiniteDifferenceBayesOptimizer:
             self._bo_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if len(self._history_y) <= self.finite_difference_iterations:
-            return self._fd_optimizer.should_stop()
         return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     def test_config(self) -> None:
@@ -1177,9 +1166,7 @@ class HybridBayesNelderMeadOptimizer:
             self._nm_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if len(self._history_y) <= self.bo_iterations:
-            return _should_stop(self._history_y, self.epsilon, window=self.window)
-        return self._nm_optimizer.should_stop()
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     # ------------------------------------------------------------------ #
     # Validation                                                          #
@@ -1283,7 +1270,7 @@ class HybridBayesFiniteDifferenceOptimizer:
         self._fd_optimizer._base_y = best_y
         # Also record it in the FD optimizer's own history so the history
         # reflects the point its state was seeded from.  This is bookkeeping
-        # only: FD's decision logic reads _base/_base_y and _step_history_y;
+        # only: FD's decision logic reads _base/_base_y;
         # _history_x/_history_y are just recorded and persisted.
         self._fd_optimizer._history_x.append(list(best_x))
         self._fd_optimizer._history_y.append(best_y)
@@ -1319,9 +1306,7 @@ class HybridBayesFiniteDifferenceOptimizer:
             self._fd_optimizer.tell(x, y)
 
     def should_stop(self) -> bool:
-        if len(self._history_y) <= self.bo_iterations:
-            return _should_stop(self._history_y, self.epsilon, window=self.window)
-        return self._fd_optimizer.should_stop()
+        return _should_stop(self._history_y, self.epsilon, window=self.window)
 
     # ------------------------------------------------------------------ #
     # Validation                                                          #
