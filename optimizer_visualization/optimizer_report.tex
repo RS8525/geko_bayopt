@@ -7,13 +7,15 @@
 % every \section -> \subsection as needed and drop the preamble down to
 % \begin{document}.
 %
-% Figures are read from optimizer_visualization/plots/individual/ --
+% Figures are read from optimizer_visualization/plots/individual/ and
+% optimizer_visualization/plots/comparison/{1d,2d,5d}/ --
 % compile from within optimizer_visualization/, or adjust \graphicspath.
 %
-% Companion document: optimizer_comparison_report.tex (real-CFD comparison).
 % This document covers (1) the configuration reference for every optimizer in
-% src/geko_bayesopt/optimizer.py and (2) the synthetic benchmark implemented
-% in _benchmark_core.py / benchmark_individual.py.
+% src/geko_bayesopt/optimizer.py, (2) the synthetic benchmark implemented
+% in _benchmark_core.py / benchmark_individual.py, and (3) the real-CFD
+% optimizer comparison on the periodic hills case (merged from the former
+% optimizer_comparison_report.tex).
 
 \documentclass[11pt]{article}
 
@@ -26,7 +28,7 @@
 \usepackage{hyperref}
 \hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
 
-\graphicspath{{plots/individual/}}
+\graphicspath{{plots/individual/}{plots/comparison/1d/}{plots/comparison/2d/}{plots/comparison/5d/}}
 
 \lstset{
   basicstyle=\ttfamily\small,
@@ -48,14 +50,14 @@
 \newcommand{\cturb}{C_{turb}}
 
 \title{Optimizers for GEKO Coefficient Calibration\\[2pt]
-\large Configuration Reference and Synthetic Benchmark}
+\large Configuration Reference, Synthetic Benchmark, and Real-CFD Comparison}
 \author{}
 \date{}
 
 \begin{document}
 \maketitle
 \tableofcontents
-
+\clearpage
 % ======================================================================
 \section{Overview and Shared Architecture}
 \label{sec:architecture}
@@ -66,9 +68,11 @@ strategies (Bayesian Optimization, Nelder--Mead, finite-difference gradient
 descent, Particle Swarm Optimization) and four two-phase hybrids that combine
 Bayesian Optimization with one of the heuristic methods in either order.
 This section documents what all of them share; Section~\ref{sec:optimizers}
-documents each kind individually, and
-Sections~\ref{sec:benchmark}--\ref{sec:benchmark-results} document the
-synthetic benchmark used to validate them.
+documents each kind individually, and Section~\ref{sec:benchmark} documents
+the synthetic benchmark used to validate them.
+Sections~\ref{sec:cfd}--\ref{sec:cfd-5d} then compare the optimizers on the
+real CFD objective, with one, two, and finally five free GEKO coefficients,
+and Section~\ref{sec:outlook} collects the open items.
 
 \subsection{The ask/tell interface}
 
@@ -84,13 +88,14 @@ opt.test_config()      # raises ValueError on an invalid configuration
 The experiment loop strictly alternates
 $\texttt{ask()} \rightarrow \text{evaluate} \rightarrow \texttt{tell()}$;
 none of the optimizers support batched or parallel asks.
-\texttt{build\_optimizer(section, parameters)} constructs the requested kind
-from the JSON configuration and calls \texttt{test\_config()} before
-returning, so invalid configurations fail at build time rather than
+\texttt{build\_optimizer(section, parameters)} takes the \texttt{"optimizer"}
+block of the experiment JSON as the \emph{section} argument
+(Section~\ref{sec:config-shape}) together with the \texttt{"parameters"}
+block, constructs the requested kind, and calls \texttt{test\_config()}
+before returning, so invalid configurations fail at build time rather than
 mid-run.
 
-A further design invariant worth knowing about (it explains several
-implementation choices below): interrupted experiments are resumed by
+Interrupted experiments are resumed by
 \emph{replaying} every completed trial through \texttt{tell()} on a fresh
 optimizer object; \texttt{ask()} is never called during a replay.  Each
 optimizer therefore advances its internal state machine entirely inside
@@ -98,6 +103,7 @@ optimizer therefore advances its internal state machine entirely inside
 uninterrupted run.
 
 \subsection{Configuration shape}
+\label{sec:config-shape}
 
 All optimizers are configured inside the \texttt{"optimizer"} block of an
 experiment JSON, which always has the same top-level shape:
@@ -130,43 +136,30 @@ Field & Default & Description \\
 \midrule
 \texttt{n\_calls} & 32 & Hard cap on total objective (CFD) evaluations. The
 experiment always stops here at the latest. \\
-\texttt{epsilon} & $10^{-4}$ & Relative-improvement threshold for early
-stopping. Must be $>0$; set to \texttt{null} to disable. \\
-\texttt{window} & 3 & Number of \emph{meaningful steps} compared by the
-epsilon check. Must be $\geq 1$. \\
+\texttt{epsilon} & \texttt{null} & Relative-improvement threshold for early
+stopping. Disabled by default; must be $>0$ when set. \\
+\texttt{window} & 3 & Number of trailing evaluations over which the
+improvement of the best-so-far value is measured. Must be $\geq 1$. \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-After each trial the optimizer checks whether improvement has stalled: the
-best value within the last \texttt{window} meaningful steps is compared
-against the best value before those steps, and if the relative improvement
-is below \texttt{epsilon} the experiment stops early.  At least
-$2\times\texttt{window}$ meaningful steps must exist before the check can
-fire, which prevents spurious stops at the very beginning.  Because the
-comparison uses the absolute difference of the two best values, a
-\emph{worsening} recent window (possible for finite differences, whose step
-series is not monotonic) does not trigger a stop; only stagnation does.
+After each trial the optimizer checks whether the search has stalled: if
+the best-so-far value has not improved by at least \texttt{epsilon}
+(relative) over the last \texttt{window} evaluations, the experiment stops
+early.  The check is identical for every optimizer kind and counts raw
+evaluations; it can fire at the earliest after $\texttt{window} + 1$
+evaluations.
 
-What counts as a meaningful step differs by optimizer, because raw function
-evaluations are not always decisions:
-
-\begin{center}
-\begin{tabular}{@{}lp{10.5cm}@{}}
-\toprule
-Optimizer & One meaningful step $=$ \\
-\midrule
-\texttt{skopt\_gp} & every evaluation \\
-\texttt{nelder\_mead} & one simplex iteration (startup evaluations and
-individual shrink evaluations do not count) \\
-\texttt{finite\_differences} & one complete gradient cycle ($D$ probes $+$ 1
-step); probe evaluations are invisible to the check \\
-\texttt{pso} & one completed swarm iteration (the global best after all
-\texttt{n\_particles} results are in) \\
-hybrids & the active phase's rule above \\
-\bottomrule
-\end{tabular}
-\end{center}
+An appropriate stopping criterion for this task has not been found yet.
+The five-coefficient runs of Section~\ref{sec:cfd-5d} show long phases of
+below-threshold improvement that are then followed by a substantial
+improvement, and a short window would cut these off.  As a first
+intuition, we would recommend a window of about 20 evaluations in five
+dimensions (lower in lower dimensions).  For finding the supposedly global
+optimum, however, the BO performance in Section~\ref{sec:cfd-5d} suggests
+a window greater than 100, which makes the stopping criterion superfluous
+in practice.
 
 \subsection{Boundary policy}
 \label{sec:bounds}
@@ -177,25 +170,20 @@ differently per optimizer, deliberately:
 \begin{itemize}
   \item \textbf{Bayesian Optimization} only ever proposes points inside the
         bounds, by construction of the search space.
-  \item \textbf{Nelder--Mead and finite differences do \emph{not} clip}:
+  \item \textbf{Nelder--Mead and finite differences}:
         a reflection, expansion, probe, or gradient step is evaluated exactly
         where proposed, even outside the nominal range.  A poor score there
-        steers the search back naturally.  Only the \emph{startup} points
-        (initial simplex, initial FD base) are clipped into the bounds so the
-        search begins in the valid region.
+        steers the search back naturally.
   \item \textbf{PSO absorbs}: a particle that overshoots a bound is placed
         exactly on it and its velocity component in that dimension is zeroed.
-        This is part of the PSO algorithm itself, not a harness workaround.
 \end{itemize}
 
-The practical consequence: with NM or FD (standalone or inside a hybrid),
-the search can in principle wander far outside the declared bounds.  The
-only hard limit is the point at which Fluent no longer accepts the proposed
-coefficient values; this has not happened in practice yet.  The best-found
-point may accordingly also lie outside the declared bounds, if that is
-where the best score occurred.
+With NM or FD the search can therefore leave the declared bounds; the only
+hard limit is the point at which Fluent no longer accepts the proposed
+coefficient values.
 
 \subsection{Determinism}
+\label{sec:determinism}
 
 All optimizers are bitwise reproducible given the same configuration: every
 stochastic component (the Sobol' initial samples, the GP
@@ -213,19 +201,28 @@ runs and resumes.
 
 Each subsection gives the algorithm summary, a baseline configuration block
 (directly usable in an experiment JSON), the meaning and valid range of every
-option, and the issues one can run into.
+option, and the issues one can run into.  Two recurring options are kept out
+of the per-optimizer tables.  \texttt{random\_state} (default 42 for every
+optimizer) seeds all stochastic components; its value matters only for
+reproducibility and for comparing optimizers on identical initial samples
+(Section~\ref{sec:determinism}), not for optimization quality.  The number
+of Sobol' samples that precede the first GP proposal (\texttt{n\_initial}
+for \texttt{skopt\_gp}, \texttt{n\_initial\_sobol} for the BO-first hybrids)
+should be roughly $10\,d$ for a $d$-dimensional problem, budget permitting.
+Beyond that, every optimizer has method-specific hyperparameters that can
+be tuned to enhance its performance; tuning them was not a focus of this
+work, but we are aware that it can be crucial
+(Section~\ref{sec:outlook}).
 
 % ----------------------------------------------------------------------
 \subsection{\texttt{skopt\_gp}: Bayesian Optimization (GP surrogate)}
 \label{sec:opt-bo}
 
-A Gaussian-process surrogate over Expected Improvement, provided by
-\texttt{scikit-optimize}.  The run starts with \texttt{n\_initial} Sobol'
-quasi-random samples to build the initial surrogate, then switches to
-model-guided proposals.  Naturally handles bounds and multi-modal
-landscapes; the surrogate refit after every \texttt{tell()} makes it the
-computationally heaviest optimizer per proposal (irrelevant when each
-evaluation is a CFD run).
+Bayesian Optimization from \texttt{scikit-optimize}: a Gaussian-process
+surrogate of the objective (Mat\'ern $\nu = 2.5$ kernel), with Expected
+Improvement as the acquisition function selecting the next evaluation
+point.  The run starts with \texttt{n\_initial} Sobol' quasi-random
+samples, then switches to model-guided proposals.
 
 \begin{lstlisting}
 "optimizer": {
@@ -237,20 +234,6 @@ evaluation is a CFD run).
     }
 }
 \end{lstlisting}
-
-\begin{center}
-\begin{tabular}{@{}llp{8.5cm}@{}}
-\toprule
-Option & Default & Description \\
-\midrule
-\texttt{n\_initial} & 8 & Sobol' samples before the GP takes over.
-Must be $\geq 1$.  Rule of thumb: $8 \times D$ for a $D$-dimensional
-problem when the budget allows. \\
-\texttt{random\_state} & 42 & Seeds the Sobol' sampler \emph{and} the GP
-hyperparameter-fit restarts, making runs fully reproducible. \\
-\bottomrule
-\end{tabular}
-\end{center}
 
 \paragraph{Possible issues.}
 \begin{itemize}
@@ -265,15 +248,17 @@ hyperparameter-fit restarts, making runs fully reproducible. \\
 \subsection{\texttt{nelder\_mead}: Nelder--Mead simplex}
 \label{sec:opt-nm}
 
-A derivative-free simplex method implemented as an explicit ask/tell state
-machine.  Phase 1 evaluates the $D{+}1$ startup simplex points one at a
+A derivative-free simplex method.  Phase 1 evaluates the $D{+}1$ startup simplex points one at a
 time; afterwards every ask/tell cycle performs one simplex operation
 (reflect, expand, contract, or one shrink step).  The startup simplex is
 built around the canonical GEKO defaults
 ($\csep{=}1.75$, $\cnw{=}0.5$, $\cmix{=}0.0$, $\cjet{=}1.0$,
 $\ccorner{=}1.0$, $\cturb{=}2.0$; only the coefficients actually being
-tuned are used) with a uniform offset of $0.1$ per dimension, clipped into
-the bounds.  No \texttt{n\_initial} is needed.
+tuned are used) with a uniform offset of $0.1$ per dimension.  No
+\texttt{n\_initial} is needed.  The four coefficients are not tuned;
+$\alpha$ and $\gamma$ are chosen conservatively compared to the textbook
+defaults of $\alpha = 1.0$ and $\gamma = 2.0$, while $\rho$ and $\sigma$
+keep the textbook values.
 
 \begin{lstlisting}
 "optimizer": {
@@ -293,11 +278,8 @@ the bounds.  No \texttt{n\_initial} is needed.
 \toprule
 Option & Default & Description \\
 \midrule
-\texttt{alpha} & 0.8 & Reflection coefficient. Must be $>0$.  Deliberately
-below the textbook $1.0$: less aggressive reflection reduces overshoot in
-the smooth, bowl-like CFD cost surface. \\
-\texttt{gamma} & 1.5 & Expansion coefficient. Must be $>1$ (textbook
-$2.0$; same rationale). \\
+\texttt{alpha} & 0.8 & Reflection coefficient. Must be $>0$. \\
+\texttt{gamma} & 1.5 & Expansion coefficient. Must be $>1$. \\
 \texttt{rho} & 0.5 & Contraction coefficient. Must be in $(0,1)$. \\
 \texttt{sigma} & 0.5 & Shrink coefficient. Must be in $(0,1)$. \\
 \bottomrule
@@ -306,16 +288,8 @@ $2.0$; same rationale). \\
 
 \paragraph{Possible issues.}
 \begin{itemize}
-  \item \textbf{Local method:} NM follows the local descent direction from
-        the GEKO defaults; on a multi-modal cost surface it converges to the
-        nearest minimum, not necessarily the global one
-        (Section~\ref{sec:res-nm} shows exactly this).
-  \item \textbf{Out-of-bounds proposals} are evaluated as-is
-        (Section~\ref{sec:bounds}).
-  \item In 1D the simplex has only two vertices, so ``second worst'' equals
-        ``best'' and the plain accept-reflection branch is unreachable; every
-        reflection triggers either an expansion attempt or a contraction.
-        Inherent to 1D NM and harmless.
+  \item \textbf{Local method:} Stopping criterion necessary.
+  \item \textbf{Out-of-bounds proposals possible.}
 \end{itemize}
 
 % ----------------------------------------------------------------------
@@ -325,8 +299,7 @@ $2.0$; same rationale). \\
 Classic gradient descent with a numerically estimated gradient.  Starting
 from the GEKO defaults, each cycle costs $D{+}1$ evaluations: $D$ forward
 probes ($\text{base} + \delta_i e_i$, one per dimension) to estimate the
-gradient, then one descent step $\text{base} - \eta \nabla f$.  The stepped
-point becomes the base for the next cycle unconditionally.  The probe
+gradient, then one descent step $\text{base} - \eta \nabla f$. The probe
 magnitude is
 $\delta_i = \mathrm{clip}\bigl((\mathrm{high}_i - \mathrm{low}_i)\cdot
 \texttt{step\_size},\ \texttt{min\_step},\ \texttt{max\_step}\bigr)$.
@@ -364,32 +337,22 @@ $\geq$ \texttt{min\_step}. \\
 \paragraph{Possible issues.}
 \begin{itemize}
   \item \textbf{Learning-rate calibration is the make-or-break setting.}
-        The appropriate value is $\eta \approx 1/L$, where $L$ is the
-        Lipschitz constant of the gradient (the maximum curvature) of the
-        cost surface.  A too-large $\eta$ overshoots and produces a zig-zag
-        walk that never settles.  The library default of $0.2$ is a generic
-        value; the synthetic benchmark uses $0.015$
-        (Section~\ref{sec:benchmark}) and the real CFD runs used $0.075$
-        standalone and $0.045$ in the BO$\to$FD exploitation phase.
-  \item \textbf{The step series is not monotonic}: the walk simply continues
-        from wherever the last step landed, so never assume the last iterate
-        is the best; report best-so-far.
-  \item \textbf{Forward-difference bias:} near a smooth optimum the walk
-        settles into a small limit cycle offset roughly $\delta/2$ from the
-        true optimum.  Set \texttt{epsilon} on real runs so the experiment
-        terminates instead of oscillating through the budget.
+        There is no affordable automatic fallback: a line search such as backtracking would spend several
+        extra CFD evaluations per descent step.
+  \item \textbf{Local method:} Stopping criterion necessary.
   \item \textbf{Probes consume budget:} of $N$ evaluations only about
         $N/(D{+}1)$ are actual descent steps; the rest are internal gradient
-        probes.
-  \item \textbf{Out-of-bounds proposals} are evaluated as-is
-        (Section~\ref{sec:bounds}).
+        probes.  Keep this in mind when picking the iteration budget:
+        otherwise the run ends having approximated a gradient it never
+        uses.
+  \item \textbf{Out-of-bounds proposals possible.}
 \end{itemize}
 
 % ----------------------------------------------------------------------
 \subsection{\texttt{pso}: Particle Swarm Optimization}
 \label{sec:opt-pso}
 
-A population method: \texttt{n\_particles} particles move under the standard
+\texttt{n\_particles} particles move under the standard
 velocity update
 \[
 v \leftarrow w\,v
@@ -398,20 +361,22 @@ v \leftarrow w\,v
 \qquad r_1, r_2 \sim \mathcal{U}(0,1),
 \]
 with the inertia weight $w$ decaying linearly from $w_{start}$ to $w_{end}$
-over the run.  Particle evaluations are serialized through the ask/tell
-loop; one swarm iteration completes after \texttt{n\_particles}
-evaluations.  Initial positions are drawn from a Sobol' sequence (seeded the
+over the run.  The swarm hyperparameters are not tuned; they follow common
+textbook values: the linearly decaying inertia weight $0.9 \to 0.4$ is the
+classic schedule, and $c_1 = c_2 = 1.5$ sits slightly below the classic
+$2.0$, a slightly more conservative attraction.  Initial positions are drawn from a Sobol' sequence (seeded the
 same way as the BO optimizers, so PSO and BO runs with equal
-\texttt{random\_state} are comparable); initial velocities are zero, so the
-first move is driven entirely by the cognitive/social attraction terms.
+\texttt{random\_state} are comparable); initial velocities are zero.
 Velocity is clamped component-wise to $\pm v_{max}$
 ($= \texttt{v\_max\_frac} \times$ range); bounds are handled by absorption
 (Section~\ref{sec:bounds}).
 
 The number of swarm iterations is \emph{derived from the budget}, not
-configured: $\texttt{max\_iter} = \texttt{n\_calls} / \texttt{n\_particles}
-- 1$ (the init sweep costs \texttt{n\_particles} evaluations, each iteration
-costs \texttt{n\_particles} more), and the inertia decay exactly spans those
+configured.  The initial Sobol' sweep and every swarm iteration each cost
+one evaluation per particle, so the budget must satisfy
+$\texttt{n\_calls} = \texttt{n\_particles} \times (1 + \texttt{max\_iter})$,
+giving $\texttt{max\_iter} = \texttt{n\_calls} / \texttt{n\_particles} - 1$
+(the $-1$ is the init sweep); the inertia decay exactly spans those
 iterations.
 
 \begin{lstlisting}
@@ -447,8 +412,6 @@ Must be $>0$. \\
 \texttt{v\_max\_frac} & 0.2 & Velocity cap per dimension as a fraction of
 that dimension's range, in $(0,1]$.  Applied every iteration, not just at
 initialization. \\
-\texttt{random\_state} & 42 & Seeds the Sobol' initial positions and the
-per-iteration $r_1$/$r_2$ draws. \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -462,13 +425,9 @@ per-iteration $r_1$/$r_2$ draws. \\
         plus at least one swarm iteration).
   \item \textbf{Particles vs.\ iterations trade-off:} with a fixed budget,
         more particles means broader coverage per iteration but fewer
-        iterations to converge.  The real-CFD sweep (see the companion
-        comparison report) found small swarms (3--5 particles) preferable
-        at tight budgets.
-  \item The epsilon check advances only once per swarm iteration, so with
-        large \texttt{n\_particles} the early-stopping machinery needs many
-        evaluations before it can fire ($2\times\texttt{window}$
-        iterations).
+        iterations to converge.  The real-CFD sweep
+        (Section~\ref{sec:cfd-pso}) found small swarms (3--5 particles)
+        preferable.
 \end{itemize}
 
 % ----------------------------------------------------------------------
@@ -506,7 +465,6 @@ Must be $\geq 1$. \\
 \texttt{"GP"}, \texttt{"RF"}, \texttt{"ET"}, or \texttt{"GBRT"}.
 \texttt{"GP"} resolves to the same explicitly built estimator as
 \texttt{skopt\_gp}. \\
-\texttt{bo\_options.random\_state} & 42 & Seed for the Bayesian phase. \\
 \texttt{nm\_options} & (see \ref{sec:opt-nm}) & Same options as standalone
 \texttt{nelder\_mead}. \\
 \bottomrule
@@ -515,20 +473,9 @@ Must be $\geq 1$. \\
 
 \paragraph{Possible issues.}
 \begin{itemize}
-  \item \textbf{Out-of-bounds warm-up points are dropped from the BO warm
-        start:} NM may propose points outside the bounds
-        (Section~\ref{sec:bounds}), but \texttt{skopt} rejects points
-        outside its space, so those evaluations are silently excluded from
-        the GP's training history.  In the pathological extreme (zero
-        in-bounds warm-up points) the first BO-phase \texttt{ask()} raises
-        a \texttt{RuntimeError}; this cannot happen under normal conditions
-        because the warm-up starts in-bounds at the GEKO defaults, and is
-        deliberately left unhandled.
-  \item \textbf{Inherited local bias:} the GP enters its phase trained
-        almost exclusively on points near wherever NM went.  If NM descended
-        into a local minimum, the warm-started BO phase needs several
-        exploratory evaluations to look elsewhere; with a short Phase 2
-        it may not escape at all (Section~\ref{sec:res-nmbo}).
+  \item Out-of-bounds warm-up points are dropped from the BO warm start by
+        construction. Edge case.
+  \item Inherited local bias.
 \end{itemize}
 
 % ----------------------------------------------------------------------
@@ -562,10 +509,8 @@ the number of FD evaluations before the switch.
 \begin{itemize}
   \item All issues of standalone FD apply during Phase 1 (learning-rate
         calibration, probes consuming budget).
-  \item Choose \texttt{n\_initial} so the FD phase ends at a cycle boundary:
-        Phase 1 begins with one base evaluation and then runs cycles of
-        $D{+}1$ evaluations, so $\texttt{n\_initial} = 1 + k\,(D{+}1)$ uses
-        the FD budget without a dangling half-finished gradient estimate.
+  \item Out-of-bounds warm-up points are dropped from the BO warm start by
+        construction. Edge case.
 \end{itemize}
 
 % ----------------------------------------------------------------------
@@ -606,7 +551,6 @@ Must be $\geq 1$. \\
 Sobol' samples within the BO phase before the GP takes over. \\
 \texttt{bo\_options.bayesian\_kind} & \texttt{"GP"} & As in
 Section~\ref{sec:opt-nmbo}. \\
-\texttt{bo\_options.random\_state} & 42 & Seed for Sobol' and the GP. \\
 \texttt{nm\_options.simplex\_scale} & 1.0 & Scale factor for the NM startup
 simplex built around the BO best point; values $<1$ tighten local
 exploitation (e.g.\ $0.6$ shrinks the offsets to $\pm 0.06$).  Ignored by
@@ -619,11 +563,7 @@ standalone \texttt{nelder\_mead}. \\
 
 \paragraph{Possible issues.}
 \begin{itemize}
-  \item If the BO phase has not yet localized a good region when
-        \texttt{n\_initial} runs out, NM refines around a mediocre point;
-        the refinement is only as good as the hand-off.  Give BO enough
-        budget to finish its Sobol' phase plus a meaningful number of
-        model-guided proposals.
+  \item Hyperparameters do not fit the local properties.
 \end{itemize}
 
 % ----------------------------------------------------------------------
@@ -634,7 +574,10 @@ Refinement hybrid.  Phase 1 as in \texttt{hybrid\_bayes\_nm}.  Phase 2:
 finite-difference descent starting from the BO best point, which is injected
 directly as the FD base \emph{without re-evaluating it}; the FD phase
 begins immediately with a gradient probe rather than wasting an evaluation
-on the already-known base.
+on the already-known base.  Because BO has already localized a promising
+region, the FD phase should run tighter than a standalone FD run; roughly
+$60\%$ of the standalone \texttt{step\_size} and \texttt{learning\_rate} is
+a reasonable starting point.
 
 \begin{lstlisting}
 "optimizer": {
@@ -653,110 +596,77 @@ on the already-known base.
 }
 \end{lstlisting}
 
-\texttt{bo\_options} as in Section~\ref{sec:opt-bonm}; \texttt{fd\_options}
-takes the same options as standalone \texttt{finite\_differences}.
+\begin{center}
+\begin{tabular}{@{}llp{7.6cm}@{}}
+\toprule
+Option & Default & Description \\
+\midrule
+\texttt{n\_initial} & 8 & Number of BO evaluations before the switch.
+Must be $\geq 1$. \\
+\texttt{bo\_options.n\_initial\_sobol} & $\min(5, \texttt{n\_initial})$ &
+Sobol' samples within the BO phase before the GP takes over. \\
+\texttt{bo\_options.bayesian\_kind} & \texttt{"GP"} & As in
+Section~\ref{sec:opt-nmbo}. \\
+\texttt{fd\_options} & (see \ref{sec:opt-fd}) & Same options as standalone
+\texttt{finite\_differences}. \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 \paragraph{Possible issues.}
 \begin{itemize}
-  \item \textbf{Tighten the FD settings:} because BO has already localized a
-        promising region, the FD phase should use a smaller
-        \texttt{step\_size} and \texttt{learning\_rate} than a standalone FD
-        run; roughly $60\%$ of the standalone values is a reasonable
-        starting point (e.g.\ $0.03$ instead of $0.05$).  A more local
-        gradient estimate and a smaller step avoid overshooting the region
-        BO identified.
-  \item The FD phase budget ($\texttt{n\_calls} - \texttt{n\_initial}$) is
-        spent in cycles of $D{+}1$ evaluations starting directly with a
-        probe; choosing it as a multiple of $D{+}1$ avoids a dangling
-        half-finished gradient estimate.
-  \item All standalone-FD caveats apply (non-monotonic step series,
-        forward-difference bias).
+  \item Learning rate does not fit the local properties.
 \end{itemize}
 
 % ======================================================================
-\section{Synthetic Benchmark: Testing Routine}
+\section{Synthetic Benchmark}
 \label{sec:benchmark}
 
 Before being applied to real CFD cases, all eight optimizers are exercised
-on cheap analytic test functions by the scripts in
-\texttt{optimizer\_visualization/}: \texttt{\_benchmark\_core.py} holds the
-test functions, optimizer configurations, and plotting helpers, and
-\texttt{benchmark\_individual.py} produces one standalone figure per
-optimizer (a side-by-side pair of the 1-D trajectory and the 2-D contour
-trajectory, written to \texttt{plots/individual/}).
+on cheap analytic test functions. The
+goal here is only to show that every optimizer works and behaves according
+to its design; the quantitative comparison happens on the real objective
+(Section~\ref{sec:cfd}).
 
 \subsection{Test functions}
 \label{sec:testfns}
 
 Both test functions are deliberately \emph{bimodal}: they possess a local
-and a global minimum, with the GEKO default starting point placed near a
-local \emph{maximum} between them, a trap for purely local methods.
-
-\paragraph{1-D.} On $\csep \in [0.5, 3.5]$:
+and a global minimum, with the starting point placed near a local
+maximum between them, a trap for purely local methods.  On
+$x \in [0.5, 3.5]$:
 \begin{equation}
-f_{1D}(x) = -2.5x \,\sin(2.5x).
+f_{1D}(x) = -2.5x \,\sin(2.5x),
 \label{eq:f1d}
 \end{equation}
-It has a local minimum at $x \approx 0.811$ ($f \approx -1.820$) and the
-global minimum at $x \approx 3.191$ ($f \approx -7.917$).  The GEKO default
-$x = 1.75$ sits at $f \approx +4.13$, near the local maximum between the two
-minima: a gradient follower started there descends into the \emph{local}
-minimum.
-
-\paragraph{2-D.} On $(\csep, \cnw) \in [0.5, 3.5] \times [0.1, 0.9]$:
+with the local minimum at $x \approx 0.811$ ($f \approx -1.820$), the
+global minimum at $x \approx 3.191$ ($f \approx -7.917$), and the start at
+$x = 1.75$ (the GEKO default of the mapped coefficient).  On
+$(x_1, x_2) \in [0.5, 3.5] \times [0.1, 0.9]$:
 \begin{equation}
 f_{2D}(x_1, x_2) = f_{1D}(x_1) + 3\,\lvert x_2 - 0.5 \rvert.
 \label{eq:f2d}
 \end{equation}
 The $x_1$ direction reuses the 1-D objective and keeps its local/global
 structure; the $x_2$ term adds a V-shaped valley with a \emph{non-smooth}
-floor at $x_2 = 0.5$ (intentional: none of the optimizers use analytic
-gradients, and the kink probes how the numerical-gradient and simplex
-methods cope with non-smoothness).  Global minimum at $(\approx 3.191,\,
-0.5)$ with $f \approx -7.917$; local minimum at $(\approx 0.811,\, 0.5)$.
-The GEKO default $(1.75, 0.5)$ again sits near the 1-D local maximum, on the
-$x_2$ valley floor.
+floor at $x_2 = 0.5$ (none of the optimizers use analytic gradients, and
+the kink probes how the numerical-gradient and simplex methods cope with
+non-smoothness).  Both minima and the start $(1.75,\ 0.5)$ lie on the
+valley floor.
 
-\subsection{Harness}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/individual/00_test_functions.png}
+\end{center}
 
-Every optimizer is built through the production
-\texttt{build\_optimizer()} path from an \texttt{OptimizerSection}; the
-benchmark exercises the exact code used in real experiments.  The loop is
-the plain ask/tell alternation with a fixed budget of $N = 24$ evaluations
-in 1-D and $N = 48$ in 2-D, identical for all optimizers.  Proposals are
-evaluated exactly where suggested, without clipping, so the NM/FD boundary
-behavior of Section~\ref{sec:bounds} is visible in the plots rather than
-masked.
-
-\paragraph{Plot elements.} In every figure: the red star is the true global
-minimum, the gold star the best point found; dot color encodes evaluation
-order (dark purple first, bright yellow last); for hybrids, circles are
-Phase-1 and triangles Phase-2 evaluations; for PSO each particle keeps one
-fixed color so its path is traceable.  For the FD-based optimizers the
-internal gradient \emph{probes} are hidden from the plot (they are
-bookkeeping, not decisions), but the ``$N = \ldots$ function evals''
-annotation still counts them: in 1-D, $N=24$ evaluations produce 12 visible
-dots (1 base $+$ 11 steps), in 2-D $N=48$ produce 16 (1 base $+$ 15 steps).
-
-\subsection{Optimizer initialization}
+\subsection{Configurations}
 \label{sec:bench-init}
 
-Table~\ref{tab:bench-config} lists the exact configuration of every
-optimizer in the benchmark (anything not listed uses the library defaults of
-Section~\ref{sec:optimizers}).  All optimizers use
-\texttt{random\_state=42}, and every optimizer with an initialization phase
-uses $\texttt{n\_initial}=9$ in 1-D and $\texttt{n\_initial}=15$ in 2-D.
-The BO-first hybrids allocate a longer Phase 1 (17 evaluations in 1-D, 32
-in 2-D), which leaves room for both the Sobol' initialization and a
-model-guided stretch before the hand-off; their refinement phases are
-tightened as recommended in
-Sections~\ref{sec:opt-bonm}--\ref{sec:opt-bofd}.
-
-The FD learning rate is calibrated to the test function: the maximum
-curvature of $f_{1D}$ on the domain is
-$L = \max \lvert f_{1D}'' \rvert \approx 52$, so the benchmark uses
-$\eta = 0.015 < 1/L \approx 0.019$.  The $x_2$ direction of $f_{2D}$ is
-piecewise linear (slope $\pm 3$), so the same rate is safe there.
+Every optimizer is built through the production \texttt{build\_optimizer()}
+path and run through the plain ask/tell loop with a fixed budget of
+$N = 24$ evaluations in 1-D and $N = 48$ in 2-D, identical for all
+optimizers.  Table~\ref{tab:bench-config} lists the configurations;
+anything not listed uses the library defaults of
+Section~\ref{sec:optimizers}.
 
 \begin{table}[htbp]
 \centering
@@ -780,7 +690,7 @@ Hybrid FD$\to$BO & \texttt{hybrid\_fd\_bayes} &
   \texttt{n\_initial=9}, & \texttt{n\_initial=15}, \\
  & & \texttt{fd: step=0.05, lr=0.015} & \texttt{fd: step=0.05, lr=0.015} \\
 Hybrid BO$\to$NM & \texttt{hybrid\_bayes\_nm} &
-  \texttt{n\_initial=17, sobol=9}, & \texttt{n\_initial=32, sobol=5}, \\
+  \texttt{n\_initial=17, sobol=9}, & \texttt{n\_initial=32, sobol=15}, \\
  & & \texttt{nm: simplex\_scale=0.6} & \texttt{nm: simplex\_scale=0.6} \\
 Hybrid BO$\to$FD & \texttt{hybrid\_bayes\_fd} &
   \texttt{n\_initial=17, sobol=9}, & \texttt{n\_initial=32, sobol=15}, \\
@@ -795,186 +705,704 @@ the budget: $24/4 - 1 = 5$ and $48/4 - 1 = 11$.}
 \label{tab:bench-config}
 \end{table}
 
-% ======================================================================
-\section{Synthetic Benchmark: Results}
-\label{sec:benchmark-results}
-
-For reference in the discussions below: the true global minimum is
-$f^\ast = -7.917$ (at $x \approx 3.191$ in 1-D, at $(\approx 3.191,\, 0.5)$
-in 2-D) and the local minimum is $f \approx -1.820$.
-
 % ----------------------------------------------------------------------
 \subsection{Bayesian Optimization}
 \label{sec:res-bo}
 
 \begin{center}
-\includegraphics[width=\textwidth]{01_bayesian_opt.png}
+\includegraphics[width=\textwidth]{plots/individual/01_bayesian_opt.png}
 \end{center}
 
-Works as intended in both dimensions.  The Sobol' samples (9 in 1-D, 15 in
-2-D) cover both basins; the model-guided phase then concentrates its
-remaining evaluations in the global basin and lands essentially on the true
-optimum: best $x = 3.191$, $f = -7.9167$ in 1-D and best $(3.19,\ 0.50)$,
-$f = -7.9162$ in 2-D.  The local-minimum trap is avoided entirely.
+Works as intended in both dimensions.  The Sobol' samples cover both
+basins; the model-guided phase then concentrates its remaining evaluations
+in the global basin and lands essentially on the true optimum.  The
+local-minimum trap is avoided entirely.
 
 % ----------------------------------------------------------------------
 \subsection{Nelder--Mead}
 \label{sec:res-nm}
 
 \begin{center}
-\includegraphics[width=\textwidth]{02_nelder_mead.png}
+\includegraphics[width=\textwidth]{plots/individual/02_nelder_mead.png}
 \end{center}
 
-Works exactly as a local method should, which here means converging to
-the \emph{local} minimum.  Starting from the GEKO-default trap point, the
-simplex walks downhill and contracts tightly onto $x = 0.812$,
-$f = -1.8197$ in 1-D (the local optimum to four decimals) and
-$(0.81,\ 0.50)$, $f = -1.8193$ in 2-D.  The global basin is never sampled;
-this is the expected and intended failure mode of a purely local method on
-a bimodal landscape, not an implementation defect.
+Works exactly as expected. The global basin is never sampled.
 
 % ----------------------------------------------------------------------
 \subsection{Finite Differences}
 \label{sec:res-fd}
 
 \begin{center}
-\includegraphics[width=\textwidth]{03_finite_differences.png}
+\includegraphics[width=\textwidth]{plots/individual/03_finite_differences.png}
 \end{center}
 
-Works as intended: a clean descent from the trap point into the local basin
-(only bases and gradient steps are plotted; the probes are hidden, so 12 of
-24 and 16 of 48 evaluations are visible).  In 1-D the walk settles
-essentially on the local optimum, $x = 0.809$, $f = -1.8197$; the tiny
-remaining offset from $x = 0.811$ is consistent with the forward-difference
-bias of Section~\ref{sec:opt-fd}.  In 2-D it reaches $(0.79,\ 0.50)$,
-$f = -1.8157$, handling the non-smooth $x_2$ ridge without oscillation at
-this learning rate.  Like NM, it cannot see the global basin.
+Works exactly as expected. A clean descent from the trap point into the local basin
+(only bases and gradient steps are plotted; the internal gradient probes
+are hidden, so fewer dots than $N$ appear). Like NM, it cannot see the global basin.
 
 % ----------------------------------------------------------------------
 \subsection{Particle Swarm Optimization}
 \label{sec:res-pso}
 
 \begin{center}
-\includegraphics[width=\textwidth]{04_particle_swarm.png}
+\includegraphics[width=\textwidth]{plots/individual/04_particle_swarm.png}
 \end{center}
 
 Works: the Sobol'-initialized swarm covers both basins, the global best
-immediately anchors in the global basin, and the swarm contracts onto it.
-Best $x = 3.169$, $f = -7.9038$ in 1-D and $(3.19,\ 0.50)$, $f = -7.9153$
-in 2-D, marginally above the true optimum, as expected from only 5 (1-D)
-resp.\ 11 (2-D) swarm iterations with four particles.  The per-particle
-coloring shows all four particles ending in the global basin.
+immediately anchors in the global basin, and the swarm contracts onto it,
+ending marginally above the true optimum, as expected from the small number
+of swarm iterations.  The per-particle coloring shows all four particles
+ending in the global basin.
 
 % ----------------------------------------------------------------------
 \subsection{Hybrid NM $\to$ BO}
 \label{sec:res-nmbo}
 
 \begin{center}
-\includegraphics[width=\textwidth]{05_hybrid_nm_bo.png}
+\includegraphics[width=\textwidth]{plots/individual/05_hybrid_nm_bo.png}
 \end{center}
 
-Illustrates the warm-start hybrid's inherited local bias
-(Section~\ref{sec:opt-nmbo}).  In 1-D the NM phase descends into the local
-basin and the warm-started GP, trained only on those local points, spends
-its fifteen evaluations refining there: best $x = 0.812$, $f = -1.8197$,
-the local minimum.  In 2-D the longer BO phase does break out: it discovers
-the global basin and reaches $(3.18,\ 0.44)$, $f = -7.7394$, far below the
-local minimum but slightly off the $x_2 = 0.5$ ridge.
-
-A second observation stands out in the 2-D panel: once the BO phase finds
-the global basin, its evaluations concentrate in a narrow column around the
-best point found instead of spreading over the still-unexplored parts of
-the domain.  The BO phase behaves strongly exploitative rather than
-explorative here.  This is presumably a phenomenon of the underlying
-Gaussian process (its fitted hyperparameters and the resulting acquisition
-landscape) and needs to be studied further.
+Illustrates the inherited local bias (Section~\ref{sec:opt-nmbo}): in 1-D
+the warm-started GP, trained only on NM's local points, refines there and
+ends at the local minimum; in 2-D the longer BO phase breaks out into the
+global basin, ending slightly off the $x_2 = 0.5$ ridge.  Note the weird
+behavior of the BO phase in the 2-D panel: instead of exploring, its
+evaluations stack up in a narrow column around the best point.  This is
+not an implementation artifact (the warm-started phase proposes bitwise
+the same points as a standalone GP fed the identical history); it is
+probably due to the biased sampling of the warm-up, whose spatially
+clustered points distort the GP fit, and needs to be studied further.
 
 % ----------------------------------------------------------------------
 \subsection{Hybrid FD $\to$ BO}
 \label{sec:res-fdbo}
 
 \begin{center}
-\includegraphics[width=\textwidth]{06_hybrid_fd_bo.png}
+\includegraphics[width=\textwidth]{plots/individual/06_hybrid_fd_bo.png}
 \end{center}
 
-Same pattern as NM$\,\to\,$BO.  In 1-D the FD warm-up walks toward the
-local basin and the warm-started BO phase stays there: best $x = 0.812$,
-$f = -1.8197$.  In 2-D the BO phase escapes to the global basin, reaching
-$f = -7.7786$ close to the optimum but slightly off the $x_2 = 0.5$ ridge.
-The same strongly exploitative Phase-2 behavior as in
-Section~\ref{sec:res-nmbo} is visible here: the BO evaluations stack up in
-a tight column around the best point rather than exploring; see the remark
-there.
+Same pattern as NM$\,\to\,$BO: the 1-D run stays in the local basin, the
+2-D run escapes to the global basin but ends slightly off the ridge, and
+the BO phase shows the same weird column-stacking as in
+Section~\ref{sec:res-nmbo}, again probably due to the biased warm-up
+sampling.
 
 % ----------------------------------------------------------------------
 \subsection{Hybrid BO $\to$ NM}
 \label{sec:res-bonm}
 
 \begin{center}
-\includegraphics[width=\textwidth]{07_hybrid_bo_nm.png}
+\includegraphics[width=\textwidth]{plots/individual/07_hybrid_bo_nm.png}
 \end{center}
 
 Works, essentially perfectly.  The BO exploration phase finds the global
 basin; the NM refinement phase, re-centred on the BO best with its
 tightened simplex (\texttt{simplex\_scale=0.6}), converges onto the
-optimum: best $x = 3.191$, $f = -7.9167$ in 1-D and $(3.19,\ 0.50)$,
-$f = -7.9163$ in 2-D.  The plots show the Phase-2 evaluations clustered
-tightly around the true optimum, the intended
-exploration-then-exploitation division of labor.
+optimum.  The plots show the Phase-2 evaluations clustered tightly around
+the true optimum, the intended exploration-then-exploitation division of
+labor.
 
 % ----------------------------------------------------------------------
 \subsection{Hybrid BO $\to$ FD}
 \label{sec:res-bofd}
 
 \begin{center}
-\includegraphics[width=\textwidth]{08_hybrid_bo_fd.png}
+\includegraphics[width=\textwidth]{plots/individual/08_hybrid_bo_fd.png}
 \end{center}
 
 Works.  In 1-D the configuration of the BO phase is identical to
 BO$\,\to\,$NM (same budget, Sobol' count, and seed), so the hand-off point
-is the same and so is the best found: $x = 3.191$, $f = -7.9167$, already
-located during the BO phase.  In 2-D the tightened FD refinement
-(\texttt{step\_size=0.03}, \texttt{learning\_rate=0.009}) descends within
-the global basin to $(3.20,\ 0.50)$, $f = -7.9039$, slightly above
-BO$\,\to\,$NM's result.  That gap is consistent with FD's probe overhead
-($D{+}1$ evaluations per descent step) and forward-difference bias, and
-matches the real-CFD comparison, where the FD-refined hybrid also trailed
-the NM-refined one.
+is the same; the best point is already located during the BO phase.  In
+2-D the tightened FD refinement descends within the global basin, ending
+slightly above BO$\,\to\,$NM's result.  That gap is consistent with FD's
+probe overhead and forward-difference bias, and matches the real-CFD
+comparison, where the FD-refined hybrid also trails the NM-refined one.
 
-% ----------------------------------------------------------------------
-\subsection{Summary}
+% ======================================================================
+\section{Real-CFD Comparison: Periodic Hills at $Re_h = 2800$}
+\label{sec:cfd}
 
-\begin{table}[htbp]
-\centering
-\begin{tabular}{@{}lllll@{}}
+The synthetic benchmark establishes, heuristically, that every optimizer
+works on simple toy problems.  This
+section extends that heuristic proof to the real objective.
+Section~\ref{sec:cfd-choice} draws the conclusion of the comparison,
+Section~\ref{sec:cfd-pso} adds a Particle Swarm particle-count sweep, and
+Section~\ref{sec:cfd-5d} extends the study to five coefficients.
+
+\subsection{Fixed simulation setup}
+\label{sec:cfd-setup}
+
+Every evaluation, regardless of optimizer, solves the same RANS periodic
+hills case in Ansys Fluent: only the proposed GEKO coefficient vector
+$\mathbf{c}$ varies between evaluations; geometry, mesh, solver settings,
+and DNS reference are held fixed across every evaluation of every optimizer
+in this study.  The free parameters:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
 \toprule
- & \multicolumn{2}{c}{1-D ($f^\ast = -7.917$)} &
-   \multicolumn{2}{c}{2-D ($f^\ast = -7.917$)} \\
-Optimizer & best $f$ & minimum found & best $f$ & minimum found \\
+Coefficient & Study & Bounds & GEKO default \\
 \midrule
-Bayesian Opt.      & $-7.9167$ & global & $-7.9162$ & global \\
-Nelder--Mead       & $-1.8197$ & local  & $-1.8193$ & local  \\
-Finite Differences & $-1.8197$ & local  & $-1.8157$ & local \\
-Particle Swarm     & $-7.9038$ & global & $-7.9153$ & global \\
-Hybrid NM$\to$BO   & $-1.8197$ & local  & $-7.7394$ & global basin, off-ridge \\
-Hybrid FD$\to$BO   & $-1.8197$ & local  & $-7.7786$ & global basin, off-ridge \\
-Hybrid BO$\to$NM   & $-7.9167$ & global & $-7.9163$ & global \\
-Hybrid BO$\to$FD   & $-7.9167$ & global & $-7.9039$ & global \\
+$\csep$ & 1-D and 2-D & $[0.7,\ 2.5]$  & $1.75$ \\
+$\cnw$  & 2-D only    & $[-2.0,\ 2.0]$ & $0.5$ \\
 \bottomrule
 \end{tabular}
-\caption{Best objective value found by each optimizer within the shared
-budget (24 evaluations in 1-D, 48 in 2-D), read from the benchmark figures.}
-\label{tab:bench-summary}
-\end{table}
+\end{center}
 
-The benchmark confirms the intended division: every optimizer behaves
-according to its design.  Methods with a global-exploration component (BO,
-PSO, and the BO-first hybrids) find the global minimum; purely local
-methods (NM, FD) converge into the local-minimum trap by construction; and
-the warm-start hybrids land in between, escaping the trap only when their
-BO phase is long enough.  On the real CFD objective, which is much closer
-to unimodal over the tested coefficient ranges, this trap does not
-materialize, and all strategies converge to comparable optima (see the
-companion comparison report).
+The 1-D study holds $\cnw$ fixed at its GEKO default; the 2-D study tunes
+both coefficients jointly.
+
+\subsection{The GEDCP cost function}
+\label{sec:cfd-costfn}
+
+The optimizer minimizes a single scalar score, the \emph{General Error and
+Default-Coefficient Preference} (GEDCP) score.  It combines a field-matching
+error against DNS with a mild penalty for straying from GEKO's own
+recommended defaults:
+
+\begin{equation}
+f(\mathbf{c}) \;=\; E_F(\mathbf{c}) \cdot \Bigl(1 + \lambda_p\, p(\mathbf{c})\Bigr),
+\qquad \lambda_p = 0.5
+\label{eq:gedcp}
+\end{equation}
+
+\paragraph{Field error $E_F$.} A sum over five DNS-observed fields
+$\Phi = \{U_x,\, U_y,\, k,\, P_k,\, \varepsilon\}$ (streamwise velocity,
+wall-normal velocity, turbulent kinetic energy, production of $k$, and
+turbulent dissipation rate) of the area-weighted,
+DNS-standard-deviation-normalized $L_2$ error between simulation and DNS:
+
+\begin{equation}
+E_F(\mathbf{c}) \;=\; \sum_{\phi \in \Phi}
+\sqrt{\; \dfrac{\displaystyle\sum_{i} w_i \left(\dfrac{\phi^{DNS}_i - \phi^{sim}_i(\mathbf{c})}{\sigma^{DNS}_\phi}\right)^{\!2}}
+{\displaystyle\sum_i w_i} \;}
+\label{eq:fielderr}
+\end{equation}
+
+where $i$ indexes DNS sample points, $w_i$ is each point's cell-area
+weight (so densely sampled regions do not dominate the score), and
+$\sigma^{DNS}_\phi$ is the area-weighted standard deviation of DNS field
+$\phi$, which puts the five fields on comparable scales.  DNS points
+inside the hill surface are excluded, and the simulation field is
+interpolated onto the remaining DNS points before the error is taken.
+
+Equation~\eqref{eq:fielderr} is the $L_2$ field-error norm, selected in the
+experiment JSON as \texttt{"field\_error\_norm": "l2"} inside the
+\texttt{gedcp} objective options.  Every result in this and the following
+sections uses this $L_2$ objective.
+
+\paragraph{Coefficient preference $p$.} A mean relative deviation of the
+optimized coefficients from their GEKO defaults:
+
+\begin{equation}
+p(\mathbf{c}) \;=\; \frac{1}{|\mathbf{c}|} \sum_{j} \left| \frac{c_j^{default} - c_j}{c_j^{default}} \right|
+\label{eq:pref}
+\end{equation}
+
+summed only over the coefficient(s) actually being tuned in a given study
+(just $\csep$ in the 1-D study; $\csep$ and $\cnw$ in the 2-D study).  A
+coefficient whose default is zero ($\cmix$ in the five-coefficient study of
+Section~\ref{sec:cfd-5d}) enters with its absolute deviation instead, since
+the relative deviation is undefined for a zero reference.
+
+The integral-quantity error term is disabled ($\lambda_I = 0$) in every
+configuration of this study, so Eq.~\eqref{eq:gedcp} reduces to
+$f(\mathbf{c}) = E_F(\mathbf{c})\,(1 + 0.5\,p(\mathbf{c}))$ in practice.
+As a reference point, the GEKO-default simulation ($\csep=1.75$,
+$\cnw=0.5$, $p=0$) scores $f = 2.9683$ under this metric in both studies.
+
+\subsection{Strategies and budgets}
+\label{sec:cfd-strategies}
+
+Seven strategies are compared, each given the same total evaluation budget:
+$21$ evaluations in the 1-D study, $60$ in the 2-D study.  The recorded BO
+runs are longer ($45$ evaluations in 1-D, $80$ in 2-D), because BO is
+additionally compared against the PSO sweep of Section~\ref{sec:cfd-pso};
+everything in this section uses only the shared budget.  The algorithms are
+those of Section~\ref{sec:optimizers}; only the run-specific settings are
+listed here.
+
+\paragraph{Bayesian Optimization.} The GP surrogate of
+Section~\ref{sec:opt-bo} (Mat\'ern kernel with $\nu=2.5$, $10$ restarts of
+the kernel hyperparameter fit, Expected Improvement acquisition).  These
+kernel and estimator settings were not tuned for this case; they are
+adopted directly from \cite{bo_hyperparams_ref}.  See
+Section~\ref{sec:outlook} for the corresponding gap in the other
+optimizers.
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Study & Total evals & Sobol' samples & Model-guided evals \\
+\midrule
+1-D & 21 & 7  & 14 \\
+2-D & 60 & 13 & 47 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Nelder--Mead.} Startup simplex centered on the GEKO defaults
+($\pm 0.1$ offset per dimension);
+reflection/expansion/contraction/shrink coefficients $\alpha=0.8$,
+$\gamma=1.5$, $\rho=0.5$, $\sigma=0.5$, a less aggressive reflection and
+expansion than the textbook defaults of $1.0$/$2.0$
+(Section~\ref{sec:opt-nm}).
+
+\paragraph{Finite Differences.} The forward-difference descent of
+Section~\ref{sec:opt-fd}, with $\text{min\_step}=10^{-5}$ and
+$\text{max\_step}=0.25$ in every configuration.  Because FD accepts every
+descent step unconditionally, the reported score is best-so-far, not
+last-iterate.
+
+\begin{center}
+\begin{tabular}{@{}llcc@{}}
+\toprule
+Config & Role & \texttt{step\_size} & \texttt{learning\_rate} \\
+\midrule
+1-D standalone FD & exploration from scratch & $0.05$ & $0.2$ \\
+1-D BO$\to$FD     & exploitation, tightened  & $0.03$ & $0.1$ \\
+2-D standalone FD & exploration from scratch & $0.05$ & $0.075$ \\
+2-D BO$\to$FD     & exploitation, tightened  & $0.03$ & $0.045$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Hybrids.} The four two-phase hybrids of
+Sections~\ref{sec:opt-nmbo}--\ref{sec:opt-bofd}.  The warm-start variants
+(NM$\to$BO, FD$\to$BO) use the same NM/FD parameters as the standalone runs,
+since their heuristic phase runs first with no prior knowledge of the
+optimum location.  The refinement variants (BO$\to$NM, BO$\to$FD) tighten
+Phase 2 around the BO best point: \texttt{simplex\_scale=0.6} for NM, and
+the reduced FD settings in the table above; in BO$\to$FD the BO best point
+is injected directly as the FD starting base without re-evaluating it, so
+the FD phase begins probing immediately.  Phase budgets:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+& \multicolumn{2}{c}{1-D (21 evals)} & 2-D (60 evals) \\
+Strategy & Phase 1 & Phase 2 & Phase 1 / Phase 2 \\
+\midrule
+FD $\to$ BO  & FD: 7           & BO: 14 & FD: 13 / BO: 47 \\
+NM $\to$ BO  & NM: 7           & BO: 14 & NM: 13 / BO: 47 \\
+BO $\to$ NM  & BO: 14 (7 Sobol' + 7 GP) & NM: 7 & BO: 35 (13 Sobol' + 22 GP) / NM: 25 \\
+BO $\to$ FD  & BO: 14 (7 Sobol' + 7 GP) & FD: 7 & BO: 35 (13 Sobol' + 22 GP) / FD: 25 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Boundary handling follows the library policy of Section~\ref{sec:bounds}:
+NM and FD proposals are evaluated exactly where suggested, even outside the
+nominal bounds; a poor score there is enough to steer the search back.  BO
+only ever proposes points inside the bounds by construction.
+
+\subsection{Results with one free coefficient ($\csep$)}
+\label{sec:cfd-1d}
+
+Reported scores are the best (minimum) GEDCP score found over the run,
+computed from the actual recorded per-iteration results.
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Strategy & Evals & Best score $f$ & Best $\csep$ \\
+\midrule
+Bayesian Optimization & 21 & 2.4208 & 0.8650 \\
+Nelder--Mead          & 21 & 2.4208 & 0.8657 \\
+Finite Differences    & 21 & 2.4247 & 0.8848 \\
+FD $\to$ BO           & 21 & 2.4208 & 0.8650 \\
+NM $\to$ BO           & 21 & 2.4208 & 0.8649 \\
+BO $\to$ NM           & 21 & 2.4208 & 0.8657 \\
+BO $\to$ FD           & 21 & 2.4208 & 0.8657 \\
+\midrule
+GEKO default (baseline) & -- & 2.9683 & 1.75 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All seven strategies converge to essentially the same score
+($f \approx 2.4208$, $\csep \approx 0.865$), a reduction of about
+$18\%$ from the GEKO default. No strategy gets trapped
+away from the others' optimum.  Standalone FD is the only outlier, settling
+about $0.2\%$ higher than the rest, consistent with its
+unconditional-accept step (Section~\ref{sec:opt-fd}), which can wander past
+the minimum after finding it.
+
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/1d/optimizer_comparison_1d_full.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/1d/optimizer_comparison_1d_after_iter14.png}
+\end{center}
+
+\subsection{Results with two free coefficients ($\csep$, $\cnw$)}
+\label{sec:cfd-2d}
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Strategy & Evals & Best score $f$ & Best $\csep$ & Best $\cnw$ \\
+\midrule
+Bayesian Optimization & 60 & 2.1803 & 0.8448 & 0.4954 \\
+Nelder--Mead          & 60 & 2.1753 & 0.8554 & 0.5000 \\
+Finite Differences    & 60 & 2.2709 & 0.8870 & 0.4196 \\
+FD $\to$ BO           & 60 & 2.1764 & 0.8468 & 0.5008 \\
+NM $\to$ BO           & 60 & 2.1769 & 0.8523 & 0.4983 \\
+BO $\to$ NM           & 60 & 2.1756 & 0.8570 & 0.5003 \\
+BO $\to$ FD           & 60 & 2.1809 & 0.8377 & 0.4964 \\
+\midrule
+GEKO default (baseline) & -- & 2.9683 & 1.75 & 0.5 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/2d/optimizer_comparison_2d_full.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/2d/optimizer_comparison_2d_after_iter35.png}
+\end{center}
+
+The picture repeats in 2-D: six of the seven strategies land within
+$0.3\%$ of the best score ($f = 2.1753$--$2.1809$), and only standalone FD
+falls behind at $f = 2.2709$, about $4.4\%$ above the best.  The
+best-found $\cnw \approx 0.50$ across every strategy except standalone FD
+sits almost exactly on its GEKO default of $0.5$: most of the joint-tuning
+benefit is concentrated in $\csep$, not $\cnw$.
+
+\subsection{Does the refinement phase actually help?}
+\label{sec:cfd-refinement}
+
+The BO$\to$NM and BO$\to$FD hybrids are designed so that a cheap
+local-refinement phase improves on whatever BO already found.  Whether that
+happened in practice can be checked directly, by asking which iteration
+produced each run's reported best score, and whether that iteration fell
+before or after the phase boundary:
+
+\begin{center}
+\begin{tabular}{@{}lcccl@{}}
+\toprule
+Strategy & Study & Phase boundary & Best found at iter. & Refinement improved on BO? \\
+\midrule
+BO $\to$ NM & 1-D & 14 & 14 & No: best is BO's own last point \\
+BO $\to$ FD & 1-D & 14 & 14 & No: best is BO's own last point \\
+BO $\to$ NM & 2-D & 35 & 57 & Yes: improved until iter.\ 57/60 \\
+BO $\to$ FD & 2-D & 35 & 17 & No: best found inside the BO phase itself \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+In three of the four cases tested, the refinement phase contributed no
+improvement at all over what BO had already found by the time it handed
+off: in both 1-D hybrids the reported best is exactly BO's last evaluation
+before the swap, and in 2-D, BO$\to$FD's best point was found at iteration
+17, eighteen iterations \emph{before} the BO phase even ended at iteration
+35, meaning neither the remainder of the BO phase nor any of the following
+25 FD evaluations improved on it.  The one exception, BO$\to$NM in 2-D,
+kept improving until iteration 57 of 60, showing the refinement idea can
+work but did not reliably do so here.  With only one run per configuration,
+this is not evidence that refinement is useless in general.
+
+\subsection{Choice of optimizer}
+\label{sec:cfd-choice}
+
+With the synthetic benchmark showing that every optimizer behaves according
+to its design, and the 1-D and 2-D CFD studies showing that all of them
+also work on the real objective, the headline result of the comparison is
+that no optimizer really outperforms another. The local-vs-global trap of the synthetic benchmark does not
+materialize on the real objective, whose cost surface behaves close to
+unimodal over the tested ranges.  The choice of a primary optimizer
+therefore rests on assumptions and robustness rather than on raw scores.
+
+On that basis, Bayesian Optimization is a fair choice as the project's
+primary optimizer.  It is a global method: the Sobol' initialization covers
+the whole box, and the acquisition function keeps balancing exploration
+against exploitation afterwards, so it cannot lock permanently onto a local
+basin.  It requires no gradients and assumes neither convexity nor
+unimodality of the objective.  Beyond continuity, the Mat\'ern $\nu=2.5$
+kernel models functions that are twice differentiable in the mean-square
+sense; this smoothness enters from the modeling perspective and is not
+necessary for the optimizer to work: the kernel is itself a hyperparameter
+and can be switched, and an objective that violates the modeled smoothness
+(such as the kink of the 2-D test function) degrades the surrogate fit
+locally without breaking the search (Section~\ref{sec:res-bo}).
+
+% ======================================================================
+\section{Particle Swarm Optimization on the Real Objective}
+\label{sec:cfd-pso}
+
+Particle Swarm Optimization is included alongside BO.  Strictly speaking
+PSO is not a global optimizer, but its stochastic velocity components make
+it unlikely to get stuck in local minima, if any exist.  Its critical
+structural advantage over every other method in this study is that the
+particle evaluations within a swarm iteration are independent of one
+another, so PSO parallelizes trivially across concurrent Fluent sessions.
+Due to this potential, a particle-count sweep of PSO is run in both
+dimensions, checking whether PSO reaches optima comparable to BO/NM; the
+head-to-head comparison against BO follows in the five-coefficient study
+(Section~\ref{sec:cfd-5d}).  Every run is executed sequentially, one
+particle at a time: exploiting PSO's parallelism is not possible in this
+work, because ANSYS Fluent does not allow parallel sessions on the student
+version.
+
+\subsection{Configuration}
+\label{sec:cfd-pso-config}
+
+The algorithm is the one of Section~\ref{sec:opt-pso}: standard velocity
+update, linearly decaying inertia, component-wise velocity clamping,
+boundary absorption (the one optimizer in this study that does clip), and
+Sobol'-initialized particle positions.  The following hyperparameters are
+identical across every PSO run in this sweep, in both dimensions:
+
+\begin{center}
+\begin{tabular}{@{}cccccc@{}}
+\toprule
+$w_{start}$ & $w_{end}$ & $c_1$ & $c_2$ & $v_{max}$ & \texttt{random\_state} \\
+\midrule
+$0.9$ & $0.2$ & $1.5$ & $1.5$ & $0.1 \times$ range & $42$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Only the particle count and the total evaluation budget change across the
+sweep; the swarm-iteration count follows from them exactly as in
+Section~\ref{sec:opt-pso},
+$\texttt{max\_iter} = \texttt{n\_calls}/\texttt{n\_particles} - 1$.
+The evaluation budget for each sweep point is a
+multiple of its particle count near a common target ($39$--$45$
+evaluations in 1-D, $75$--$80$ in 2-D), so runs with different
+particle counts remain roughly comparable in total cost; more particles
+therefore mechanically means fewer swarm iterations:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Study & Particles & Evals & Swarm iterations \\
+\midrule
+1-D & 3  & 39 & 12 \\
+1-D & 5  & 40 & 7  \\
+1-D & 7  & 42 & 5  \\
+1-D & 9  & 45 & 4  \\
+2-D & 10 & 80 & 7  \\
+2-D & 15 & 75 & 4  \\
+2-D & 20 & 80 & 3  \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{One-dimensional sweep}
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Particles & Evals & Best score $f$ & Best $\csep$ \\
+\midrule
+3 & 39 & 2.4208 & 0.8644 \\
+5 & 40 & 2.4208 & 0.8646 \\
+7 & 42 & 2.4256 & 0.8435 \\
+9 & 45 & 2.4256 & 0.8435 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/1d/optimizer_comparison_1d_vs_pso_full.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/1d/optimizer_comparison_1d_vs_pso_after_iter7.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/1d/optimizer_comparison_1d_vs_pso_after_iter28.png}
+\end{center}
+
+BO appears in these figures with its extended 45-evaluation history
+(Section~\ref{sec:cfd-strategies}), so it stays visible across all three
+cutoffs.
+
+\subsection{Two-dimensional sweep}
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Particles & Evals & Best score $f$ & Best $\csep$, $\cnw$ \\
+\midrule
+10 & 80 & 2.1873 & 0.8885,\ 0.5008 \\
+15 & 75 & 2.1931 & 0.8589,\ 0.5187 \\
+20 & 80 & 2.2403 & 0.8730,\ 0.4401 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/2d/optimizer_comparison_2d_vs_pso_full.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/2d/optimizer_comparison_2d_vs_pso_after_iter13.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/2d/optimizer_comparison_2d_vs_pso_after_iter51.png}
+\end{center}
+
+BO's extended 80-evaluation history
+(Section~\ref{sec:cfd-strategies}) keeps it visible in all three 2-D
+figures as well.
+
+\subsection{Sweep discussion}
+
+PSO also finds the minimum: the best sweep points tie BO/NM's 1-D optimum
+exactly, and the best 2-D result lands within one percent of the best 2-D
+score.  Performance varies with the particle count, however: at a roughly
+fixed budget, more particles leave fewer swarm iterations to converge, and
+both sweeps degrade with growing particle count.  The head-to-head
+comparison against BO continues in five dimensions
+(Section~\ref{sec:cfd-5d}).
+
+% ======================================================================
+\section{Extended Study: Five-Coefficient Calibration}
+\label{sec:cfd-5d}
+
+The five-coefficient study compares BO and PSO head-to-head.  Both found
+the minimum in the 1-D and 2-D studies, and both are robust and global
+(BO) or basically global (PSO, Section~\ref{sec:cfd-choice}) methods; a
+further reason to try PSO is the acceleration that its parallelizability
+could yield (Section~\ref{sec:cfd-pso}).  The study runs on the same
+periodic hills case and the same $L_2$ GEDCP objective
+(Section~\ref{sec:cfd-costfn}), now tuning five GEKO coefficients jointly
+($\ccorner$ stays at its default):
+
+\begin{center}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Coefficient & Bounds & GEKO default \\
+\midrule
+$\csep$  & $[0.7,\ 2.5]$  & $1.75$ \\
+$\cnw$   & $[-2.0,\ 2.0]$ & $0.5$  \\
+$\cmix$  & $[-0.2,\ 1.0]$ & $0.0$  \\
+$\cturb$ & $[0.5,\ 2.5]$  & $2.0$  \\
+$\cjet$  & $[0.0,\ 1.2]$  & $1.0$  \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Every run has the same budget of $300$ evaluations.  BO uses $60$ Sobol'
+samples before the model-guided phase.  PSO runs the particle counts $15$,
+$30$, and $50$, which the derived-iteration rule of
+Section~\ref{sec:opt-pso} turns into $19$, $9$, and $5$ swarm iterations
+respectively; the swarm hyperparameters ($w_{start}$, $w_{end}$, $c_1$,
+$c_2$, $v_{max}$) are those of Section~\ref{sec:cfd-pso-config}.
+
+\subsection{Results}
+
+\begin{center}
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+Strategy & Evals & Best $f$ & $\csep$ & $\cnw$ & $\cmix$ & $\cturb$ & $\cjet$ \\
+\midrule
+Bayesian Optimization & 300 & 1.9651 & 1.770 & 0.499 & 0.235 & 0.705 & 1.013 \\
+PSO, 15 particles     & 300 & 1.9663 & 1.754 & 0.501 & 0.208 & 0.674 & 0.974 \\
+PSO, 30 particles     & 300 & 1.9880 & 2.057 & 0.506 & 0.180 & 0.576 & 0.997 \\
+PSO, 50 particles     & 300 & 1.9948 & 1.864 & 0.508 & 0.188 & 0.651 & 0.878 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/5d/optimizer_comparison_5d_vs_pso_after_iter50.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/5d/optimizer_comparison_5d_vs_pso_after_iter100.png}
+\end{center}
+\begin{center}
+\includegraphics[width=\textwidth]{plots/comparison/5d/optimizer_comparison_5d_vs_pso_after_iter200.png}
+\end{center}
+
+\subsection{Interpretation}
+
+Both optimizers find the same optimum region, and at the shared budget
+their best scores are essentially tied: BO finishes at $f = 1.9651$, the
+15-particle PSO run at $f = 1.9663$, a gap of under $0.1\%$.  The
+particle-count trend repeats the 1-D sweep of Section~\ref{sec:cfd-pso}:
+fewer particles with more swarm iterations beat more particles with fewer
+iterations ($15$ particles / $19$ iterations at $1.9663$, then $30/9$ at
+$1.9880$, then $50/5$ at $1.9948$).
+
+The BO trajectory also supplies the observation behind the stopping-window
+recommendation of Section~\ref{sec:stopping}: after reaching $f = 1.990$
+at around evaluation $110$, BO improves below any practical threshold for
+roughly $150$ evaluations before dropping to its final $1.9651$ shortly
+after evaluation $260$.  A stopping criterion with a short window would
+have cut the run off well before its best point.
+
+All four runs agree on where the optimum lies: $\cnw$ stays on its default
+($\approx 0.50$, as in the 2-D study), $\cmix \approx 0.18$--$0.24$,
+$\cturb \approx 0.58$--$0.71$ (well below its default of $2.0$), and
+$\cjet \approx 0.88$--$1.01$.  Notably, the best $\csep$ sits at
+$1.75$--$2.06$, near its GEKO default, rather than at the
+$\approx 0.84$--$0.87$ that both lower-dimensional studies find: with
+$\cmix$, $\cturb$, and $\cjet$ free, the preferred separation coefficient
+shifts, a direct sign of coefficient interaction that a
+one-coefficient-at-a-time calibration would miss.
+
+It is fair to conclude from these runs that PSO, with suitable parameters,
+can absolutely compete with BO on this objective.  Where the two differ is
+wall-clock potential: PSO's budget comes in rounds of independent
+evaluations ($20$ rounds of $15$ for the best run), so with concurrent
+Fluent sessions its wall-clock cost would shrink by up to the particle
+count, whereas BO's $300$ evaluations are strictly sequential.  Every run
+here is a single seed, so the spread between the PSO variants should be
+read with that caveat.
+
+% ======================================================================
+\section{Outlook}
+\label{sec:outlook}
+
+Three items remain open before the optimizer story of this project can be
+considered closed:
+
+\paragraph{PSO hyperparameter tuning.}  None of PSO's hyperparameters
+(inertia schedule, cognitive/social coefficients, velocity cap, particle
+count) were systematically tuned for the periodic-hills objective.  The
+values of Section~\ref{sec:cfd-pso-config} were chosen empirically:
+starting from textbook values, they were adjusted once after the 2-D study
+toward a slightly more conservative, less explorative setting (weaker
+attraction coefficients, halved velocity cap, lower final inertia weight)
+and have not been touched since.  Given how directly the particle-count
+sweeps show configuration affecting the reached optimum, a systematic
+hyperparameter search for PSO is the most promising next step; see
+\cite{pso_future_work_ref} for guidance on hyperparameter selection.
+
+\paragraph{PSO parallelization.}  PSO's particles are independent within a
+swarm iteration, and Section~\ref{sec:cfd-5d} shows this parallelism is
+what makes its larger budgets affordable in wall-clock terms.  Every run in
+this document is nevertheless executed one particle at a time, precisely
+because ANSYS Fluent's student version does not allow parallel sessions.
+Implementing concurrent particle evaluation (dispatching all particles of a
+swarm iteration to separate Fluent sessions at once) therefore remains open
+and requires a full license; it is the prerequisite for realizing the
+wall-clock advantage in practice; see \cite{pso_future_work_ref}.
+
+\paragraph{BO hyperparameter verification.}  BO's kernel and estimator
+settings (Mat\'ern $\nu=2.5$, 10 kernel-fit restarts, Sobol' initialization)
+are adopted from \cite{bo_hyperparams_ref}, a study carried out in two
+dimensions.  Whether these settings remain optimal for the five-coefficient
+space (and the larger spaces this project is heading toward) has not been
+verified and should be double-checked before BO's results are treated as
+the ceiling of what the method can deliver.
+
+\begin{thebibliography}{9}
+\bibitem{breuer2009}
+M.\ Breuer, N.\ Peller, Ch.\ Rapp, M.\ Manhart,
+\emph{Flow over periodic hills -- numerical and experimental study in a wide
+range of Reynolds numbers}, Computers \& Fluids, 38(2):433--457, 2009.
+% TODO(user): replace this entry with the actual reference for the paper the
+% BO kernel/estimator hyperparameters (Matern nu=2.5, 10 kernel restarts,
+% Sobol initialization) were adopted from.
+\bibitem{bo_hyperparams_ref}
+\textit{[reference pending -- to be inserted]}
+% TODO(user): replace this entry with the actual reference for the PSO
+% parallelization / hyperparameter-tuning paper.
+\bibitem{pso_future_work_ref}
+\textit{[reference pending -- to be inserted]}
+\end{thebibliography}
 
 \end{document}

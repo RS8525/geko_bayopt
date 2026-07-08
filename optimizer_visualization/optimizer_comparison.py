@@ -3,8 +3,9 @@ Optimizer comparison for the periodic hills Re=2800 case.
 
 Usage
 -----
-    python optimizer_comparison.py                # 1-D results (default)
-    python optimizer_comparison.py --dim 2d       # 2-D results
+    python optimizer_visualization\optimizer_comparison.py                # 1-D results (default)
+    python optimizer_visualization\optimizer_comparison.py --dim 2d       # 2-D results
+    python optimizer_visualization\optimizer_comparison.py --dim 5d       # 5-D results (BO vs PSO only)
 
 Missing experiment folders and early-stopped runs are silently skipped.
 """
@@ -28,7 +29,16 @@ REPO_ROOT = Path(__file__).parent.parent.resolve()   # project root
 # hybrid configs use different n_initial_sobol / n_initial per dimension
 # (see configs/optimizer_comparison_configs/{1D,2D}/07_*.json, 08_*.json).
 _BO_SAMPLING_STOP = {"1d": 7, "2d": 13}
-_BO_SWAP_ITER = {"1d": 14, "2d": 23}
+_BO_SWAP_ITER = {"1d": 14, "2d": 35}
+_5D_CUTOFF_ONE = 50
+_5D_CUTOFF_TWO = 100
+_5D_CUTOFF_THREE = 200
+
+# Shared evaluation budget of the seven-strategy comparison. The recorded BO
+# runs are longer (45 evals in 1-D, 80 in 2-D) because BO is also compared
+# against the PSO sweep; in the main comparison plots every run is truncated
+# to this budget so BO's extra iterations only appear in the vs_pso plots.
+_SHARED_BUDGET = {"1d": 21, "2d": 60}
 
 # Main comparison: BO, NM, FD, and all hybrids. PSO is excluded here and
 # plotted separately (see RUNS_1D_BO_VS_PSO / RUNS_2D_BO_VS_PSO below) since
@@ -69,14 +79,26 @@ RUNS_2D_BO_VS_PSO = [
     ("PSO_2D_ph2800_p20",   "Particle Swarm; 20 particles"),
 ]
 
+RUNS_5D_BO_VS_PSO = [
+    ("BO_5D_ph2800",        "Bayesian Opt (GP)"),
+    ("PSO_5D_ph2800_p15",   "Particle Swarm; 15 particles"),
+    ("PSO_5D_ph2800_p30",   "Particle Swarm; 30 particles"),
+    ("PSO_5D_ph2800_p50",   "Particle Swarm; 50 particles")
+]
+
+
 _TITLES = {
     "1d": "Optimizer Comparison - Periodic Hills Re=2800, 1D (geko_csep)",
     "2d": "Optimizer Comparison - Periodic Hills Re=2800, 2D (geko_csep, geko_cnw)",
+    # Parameter list on its own line: the full 5-D title is too wide for the
+    # 10x5 figure and gets clipped otherwise.
+    "5d": "Optimizer Comparison - Periodic Hills Re=2800, 5D\n(geko_csep, geko_cnw, geko_cmix, geko_cturb, geko_cjet)"
 }
 
 _SUBDIRS = {
     "1d": "one-param-runs",
     "2d": "two-param-runs",
+    "5d": "five-param-runs",
 }
 
 # metadata.csv parameter columns to report the argmin for, and how to display
@@ -84,22 +106,30 @@ _SUBDIRS = {
 _PARAM_COLS = {
     "1d": ["geko_csep"],
     "2d": ["geko_csep", "geko_cnw"],
+    "5d": ["geko_csep", "geko_cnw", "geko_cmix", "geko_cturb", "geko_cjet"]
 }
 _PARAM_DISPLAY_NAMES = {
     "geko_csep": "Csep",
     "geko_cnw": "Cnw",
+    "geko_cmix": "Cmix",
+    "geko_cturb": "Cturb",
+    "geko_cjet": "Cjet"
 }
 
 # Iterations <= this value are excluded from the "after_iter<N>" plot
 # (stage 1 -- shortly after BO sampling stops).
 _CUT_ITER_1D = _BO_SAMPLING_STOP["1d"]
 _CUT_ITER_2D = _BO_SAMPLING_STOP["2d"]
-
+_CUT_ITER_5D = _5D_CUTOFF_ONE
 # Iterations <= this value are excluded from the "after_iter<N>" plot
 # (stage 2 -- everything after the BO -> NM/FD swap). Reuses _BO_SWAP_ITER
 # since that is exactly where the second vertical line sits.
 _CUT_ITER_1D_STAGE2 = _BO_SWAP_ITER["1d"]
 _CUT_ITER_2D_STAGE2 = _BO_SWAP_ITER["2d"]
+_CUT_ITER_5D_STAGE2 = _5D_CUTOFF_TWO
+
+_CUT_ITER_5D_STAGE3 =  _5D_CUTOFF_THREE
+
 
 # Second cutoff for the dedicated BO-vs-PSO plots (the first cutoff reuses
 # _BO_SAMPLING_STOP directly, since that is exactly where BO's own sampling
@@ -140,6 +170,10 @@ _RUN_COLORS = {
     "Particle Swarm; 10 particles": "#fdae6b",
     "Particle Swarm; 15 particles": "#f16913",
     "Particle Swarm; 20 particles": "#a63603",
+
+    "Particle Swarm; 15 particles, 5D": "#fdae6b",
+    "Particle Swarm; 30 particles, 5D": "#f16913",
+    "Particle Swarm; 50 particles, 5D": "#a63603",
 }
 
 
@@ -179,18 +213,26 @@ def _load_scores(experiment_id: str, dim: str) -> tuple[np.ndarray, list[dict[st
 
 
 def _argmin_suffix(scores: np.ndarray, param_rows: list[dict[str, float]], dim: str) -> str:
-    """'; Csep=0.886' (1-D) or '; Csep=0.886, Cnw=0.500' (2-D) for the best point found."""
-    best = param_rows[int(np.argmin(scores))]
+    """'; Csep=0.886; cost=1.234' -- parameters and cost of the best point found."""
+    best_idx = int(np.argmin(scores))
+    best = param_rows[best_idx]
     parts = [f"{_PARAM_DISPLAY_NAMES[c]}={best[c]:.3f}" for c in _PARAM_COLS[dim]]
-    return "; " + ", ".join(parts)
+    return "; " + ", ".join(parts) + f"; cost={scores[best_idx]:.4f}"
 
 
-def _load_runs(runs: list[tuple[str, str]], dim: str) -> list[tuple[str, str, np.ndarray]]:
+def _load_runs(
+    runs: list[tuple[str, str]], dim: str, max_iter_cap: int | None = None
+) -> list[tuple[str, str, np.ndarray]]:
     """Load scores for each (experiment_id, label) pair, skipping missing ones.
 
     Returns (base_label, display_label, scores) tuples: base_label is used to
     look up a stable colour, display_label (base_label + argmin suffix) is
     what's shown in the legend.
+
+    max_iter_cap truncates every run to its first ``max_iter_cap`` evaluations
+    (used to cut BO's extended history down to the shared budget in the main
+    comparison plots); the legend's argmin then also refers to the truncated
+    history.
     """
     loaded: list[tuple[str, str, np.ndarray]] = []
     for exp_id, label in runs:
@@ -199,6 +241,8 @@ def _load_runs(runs: list[tuple[str, str]], dim: str) -> list[tuple[str, str, np
             print(f"[plot] No results yet for '{label}' -- skipping.")
             continue
         scores, param_rows = result
+        if max_iter_cap is not None:
+            scores, param_rows = scores[:max_iter_cap], param_rows[:max_iter_cap]
         display_label = label + _argmin_suffix(scores, param_rows, dim)
         loaded.append((label, display_label, scores))
     if not loaded:
@@ -218,8 +262,17 @@ def _set_adaptive_ylim(ax, bsf_arrays: list[np.ndarray], pad_frac: float = 0.05)
     ax.set_ylim(y_min - pad, y_max + pad)
 
 
+def _run_color(base_label: str, dim: str) -> str | None:
+    """Colour for a run label; 5-D PSO runs have their own entries (', 5D' keys)."""
+    if dim == "5d":
+        return _RUN_COLORS.get(f"{base_label}, 5D", _RUN_COLORS.get(base_label))
+    return _RUN_COLORS.get(base_label)
+
+
 def _draw_phase_markers(ax, dim: str, cut_iter: int | None = None, show_swap_marker: bool = True) -> None:
     """Draw the BO-phase vertical markers (sampling stop / BO->NM/FD swap)."""
+    if dim not in _BO_SAMPLING_STOP:   # 5-D runs have no phase markers
+        return
     sampling_stop = _BO_SAMPLING_STOP[dim]
     swap_iter = _BO_SWAP_ITER[dim]
     if cut_iter is None or sampling_stop > cut_iter:
@@ -235,16 +288,17 @@ def _draw_phase_markers(ax, dim: str, cut_iter: int | None = None, show_swap_mar
 # ------------------------------------------------------------------ #
 
 def plot_comparison_full(dim: str, runs: list[tuple[str, str]], slug: str = "",
-                          show_swap_marker: bool = True) -> None:
-    """Plot every iteration, uncut."""
+                          show_swap_marker: bool = True,
+                          max_iter_cap: int | None = None) -> None:
+    """Plot every iteration, uncut (up to max_iter_cap if given)."""
     fig, ax = plt.subplots(figsize=(10, 5))
-    loaded = _load_runs(runs, dim)
+    loaded = _load_runs(runs, dim, max_iter_cap=max_iter_cap)
 
     bsf_arrays: list[np.ndarray] = []
     for base_label, display_label, scores in loaded:
         best_so_far = np.minimum.accumulate(scores)
         iters = np.arange(1, len(scores) + 1)
-        ax.plot(iters, best_so_far, linewidth=2, label=display_label, color=_RUN_COLORS.get(base_label))
+        ax.plot(iters, best_so_far, linewidth=2, label=display_label, color=_run_color(base_label, dim))
         bsf_arrays.append(best_so_far)
 
     _draw_phase_markers(ax, dim, show_swap_marker=show_swap_marker)
@@ -265,10 +319,11 @@ def plot_comparison_full(dim: str, runs: list[tuple[str, str]], slug: str = "",
 
 
 def plot_comparison_cut(dim: str, runs: list[tuple[str, str]], cut_iter: int, slug: str = "",
-                         show_swap_marker: bool = True, title: str | None = None) -> None:
+                         show_swap_marker: bool = True, title: str | None = None,
+                         max_iter_cap: int | None = None) -> None:
     """Same as plot_comparison_full but omits all iterations <= cut_iter."""
     fig, ax = plt.subplots(figsize=(10, 5))
-    loaded = _load_runs(runs, dim)
+    loaded = _load_runs(runs, dim, max_iter_cap=max_iter_cap)
 
     max_iters = max(len(s) for _, _, s in loaded) if loaded else 0
 
@@ -284,7 +339,7 @@ def plot_comparison_cut(dim: str, runs: list[tuple[str, str]], cut_iter: int, sl
         if len(iters_cut) == 0:
             continue
 
-        ax.plot(iters_cut, bsf_cut, linewidth=2, label=display_label, color=_RUN_COLORS.get(base_label))
+        ax.plot(iters_cut, bsf_cut, linewidth=2, label=display_label, color=_run_color(base_label, dim))
         bsf_arrays.append(bsf_cut)
 
     _draw_phase_markers(ax, dim, cut_iter=cut_iter, show_swap_marker=show_swap_marker)
@@ -313,11 +368,22 @@ def plot_comparison_cut(dim: str, runs: list[tuple[str, str]], cut_iter: int, sl
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot optimizer comparison.")
     parser.add_argument(
-        "--dim", choices=["1d", "2d"], default="1d",
+        "--dim", choices=["1d", "2d", "5d"], default="1d",
         help="Which parameter dimension to plot (default: 1d).",
     )
     args = parser.parse_args()
     dim = args.dim
+
+    if dim == "5d":
+        # 5-D final comparison: BO vs the PSO particle-count sweep only (no
+        # NM/FD runs, hence no phase markers). One uncut full plot plus three
+        # after-cut plots. BO is kept in every plot, including the third cut.
+        plot_comparison_full(dim, RUNS_5D_BO_VS_PSO, slug="vs_pso_",
+                             show_swap_marker=False)
+        for cut in (_CUT_ITER_5D, _CUT_ITER_5D_STAGE2, _CUT_ITER_5D_STAGE3):
+            plot_comparison_cut(dim, RUNS_5D_BO_VS_PSO, cut_iter=cut,
+                                slug="vs_pso_", show_swap_marker=False)
+        raise SystemExit(0)
 
     runs_bo = RUNS_1D_BO if dim == "1d" else RUNS_2D_BO
     runs_pso = RUNS_1D_BO_VS_PSO if dim == "1d" else RUNS_2D_BO_VS_PSO
@@ -326,25 +392,18 @@ if __name__ == "__main__":
     cut_iter_stage2 = _CUT_ITER_1D_STAGE2 if dim == "1d" else _CUT_ITER_2D_STAGE2
     cut_iter_pso = _CUT_ITER_1D_PSO if dim == "1d" else _CUT_ITER_2D_PSO
 
-    # Main comparison: BO, NM, FD, and all hybrids.
-    plot_comparison_full(dim, runs_bo)
-    plot_comparison_cut(dim, runs_bo, cut_iter=cut_iter_stage1)
-    plot_comparison_cut(dim, runs_bo, cut_iter=cut_iter_stage2)
+    # Main comparison: BO, NM, FD, and all hybrids. Every run is truncated to
+    # the shared budget: BO's recorded history is longer (it is extended for
+    # the PSO comparison below) and those extra iterations are not meant to
+    # be shown here.
+    cap = _SHARED_BUDGET[dim]
+    plot_comparison_full(dim, runs_bo, max_iter_cap=cap)
+    plot_comparison_cut(dim, runs_bo, cut_iter=cut_iter_stage1, max_iter_cap=cap)
+    plot_comparison_cut(dim, runs_bo, cut_iter=cut_iter_stage2, max_iter_cap=cap)
 
     # Dedicated BO-vs-PSO comparison: no NM/FD runs here, so the
-    # "BO swaps to NM/FD" marker doesn't apply.
+    # "BO swaps to NM/FD" marker doesn't apply. BO's full extended history is
+    # intended here, so no cap: it stays visible through every cutoff.
     plot_comparison_full(dim, runs_pso, slug="vs_pso_", show_swap_marker=False)
     plot_comparison_cut(dim, runs_pso, cut_iter=_BO_SAMPLING_STOP[dim], slug="vs_pso_", show_swap_marker=False)
-
-    # Stage-2 PSO cut: in 1-D the cut (28) lies past BO's 21-eval budget, so
-    # BO would drop out of the figure anyway -- plot the PSO runs alone under
-    # a "pso_only" slug/title to make that explicit. In 2-D BO survives the
-    # cut (51 < 70), so it stays a BO-vs-PSO plot.
-    if dim == "1d":
-        runs_pso_tail = [(exp_id, label) for exp_id, label in runs_pso
-                         if not exp_id.startswith("BO_")]
-        plot_comparison_cut(dim, runs_pso_tail, cut_iter=cut_iter_pso, slug="pso_only_",
-                            show_swap_marker=False,
-                            title="PSO Particle-Count Comparison - Periodic Hills Re=2800, 1D (geko_csep)")
-    else:
-        plot_comparison_cut(dim, runs_pso, cut_iter=cut_iter_pso, slug="vs_pso_", show_swap_marker=False)
+    plot_comparison_cut(dim, runs_pso, cut_iter=cut_iter_pso, slug="vs_pso_", show_swap_marker=False)

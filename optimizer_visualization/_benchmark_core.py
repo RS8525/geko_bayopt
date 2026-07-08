@@ -135,15 +135,17 @@ N_2D = 48   # total function evaluations for 2-D benchmark
 # PSO accounting  n_particles × (1 init + max_iter swarm iterations):
 #   max_iter is derived internally from n_calls // n_particles - 1, so
 #   n_calls must divide evenly by n_particles:
-#   1-D:  20 evals / 4 particles → max_iter = 4
-#   2-D:  36 evals / 4 particles → max_iter = 8
+#   1-D:  24 evals / 4 particles → max_iter = 5
+#   2-D:  48 evals / 4 particles → max_iter = 11
 #
 # FD cycle lengths (base + D probes + 1 step per cycle):
-#   1-D: total must be divisible by 2 (D+1).  20 / 2 = 10 cycles ✓
-#   2-D: total must be divisible by 3 (D+1).  36 / 3 = 12 cycles ✓
+#   1-D: total must be divisible by 2 (D+1).  24 / 2 = 12 cycles ✓
+#   2-D: total must be divisible by 3 (D+1).  48 / 3 = 16 cycles ✓
 #
 # BO→FD: FD phase starts from the BO best (no re-evaluation of the base),
-#   so FD uses its full budget in triples:  2×5=10 (1-D),  3×5=15 (2-D).
+#   so FD spends its budget in (D+1)-blocks:
+#   1-D:  24 − 17 = 7  → 3 full cycles + 1 leftover probe
+#   2-D:  48 − 32 = 16 → 5 full cycles + 1 leftover probe
 # ===========================================================================
 
 _S1 = {"n_calls": N_1D}
@@ -188,11 +190,11 @@ OPTIMIZERS: list[tuple[
         "Particle Swarm  (PSO)",
         "04_particle_swarm",
         None, None,
-        # 4 particles, 20 evals → max_iter = 20/4 - 1 = 4 (derived internally)
+        # 4 particles, 24 evals → max_iter = 24/4 - 1 = 5 (derived internally)
         OptimizerSection(kind="pso", stopping_criteria=_S1,
                          kind_specific_options={
                              "n_particles": 4, "random_state": 42}),
-        # 4 particles, 36 evals → max_iter = 36/4 - 1 = 8 (derived internally)
+        # 4 particles, 48 evals → max_iter = 48/4 - 1 = 11 (derived internally)
         OptimizerSection(kind="pso", stopping_criteria=_S2,
                          kind_specific_options={
                              "n_particles": 4, "random_state": 42}),
@@ -201,7 +203,7 @@ OPTIMIZERS: list[tuple[
     (
         "Hybrid  NM → BO",
         "05_hybrid_nm_bo",
-        10, 16,
+        9, 15,
         OptimizerSection(kind="hybrid_nm_bayes", stopping_criteria=_S1,
                          kind_specific_options={
                              "n_initial": 9,
@@ -219,7 +221,7 @@ OPTIMIZERS: list[tuple[
     (
         "Hybrid  FD → BO",
         "06_hybrid_fd_bo",
-        9, 16,
+        9, 15,
         OptimizerSection(kind="hybrid_fd_bayes", stopping_criteria=_S1,
                          kind_specific_options={
                              "n_initial": 9,
@@ -237,7 +239,7 @@ OPTIMIZERS: list[tuple[
     (
         "Hybrid  BO → NM",
         "07_hybrid_bo_nm",
-        10, 20,
+        17, 32,
         # nm_options: simplex_scale=0.6 shrinks the NM startup simplex to 60% of
         # normal, tightening the search around the BO best point for exploitation.
         OptimizerSection(kind="hybrid_bayes_nm", stopping_criteria=_S1,
@@ -249,7 +251,7 @@ OPTIMIZERS: list[tuple[
         OptimizerSection(kind="hybrid_bayes_nm", stopping_criteria=_S2,
                          kind_specific_options={
                              "n_initial": 32,
-                             "bo_options": {"n_initial_sobol": 5, "random_state": 42},
+                             "bo_options": {"n_initial_sobol": 15, "random_state": 42},
                              "nm_options": {"simplex_scale": 0.6},
                          }),
     ),
@@ -257,7 +259,7 @@ OPTIMIZERS: list[tuple[
     (
         "Hybrid  BO → FD",
         "08_hybrid_bo_fd",
-        10, 20,
+        17, 32,
         # fd_options: step_size and learning_rate at 60% of standalone FD values
         # to tighten the gradient search around the BO best point for exploitation.
         OptimizerSection(kind="hybrid_bayes_fd", stopping_criteria=_S1,
