@@ -23,13 +23,14 @@
         {"name": "geko_cnw", "low": -2.0, "high": 2.0}
     ],
     "objective": {
-        "kind": "gedcp",
-        "options": {
-            "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
-            "integral_weights": {},
-            "lambda_field": 1.0,
-            "lambda_integral": 0.0,
-            "lambda_preference": 0.5
+    "kind": "gedcp",
+    "options": {
+        "field_names": ["Ux", "Uy", "turb-kinetic-energy", "production-of-k", "turb-diss-rate"],
+        "field_error_norm": "l2",
+        "integral_weights": {},
+        "lambda_field": 1.0,
+        "lambda_integral": 0.0,
+        "lambda_preference": 0.5
         }
     },
     "optimizer": {
@@ -55,21 +56,21 @@
         "length_unit": "mm",
         "cad_route": "Workbench",
         "cad_extension": "pmdb",
-        "min_size": 7.2,
-        "max_size": 21.6,
+        "min_size": 9.465,
+        "max_size": 28.394,
         "growth_rate": 1.15,
         "curvature_normal_angle": 12,
-        "bl_first_layer_height": 0.72,
+        "bl_first_layer_height": 0.946,
         "bl_number_of_layers": 22,
         "bl_growth_rate": 1.2,
         "generate_quads": true
     },
     "residual_criteria": {
-        "continuity": 1.0e-5,
-        "x_velocity": 1.0e-5,
-        "y_velocity": 1.0e-5,
-        "k": 1.0e-5,
-        "omega": 1.0e-5
+        "continuity": 1.0e-7,
+        "x_velocity": 1.0e-7,
+        "y_velocity": 1.0e-7,
+        "k": 1.0e-7,
+        "omega": 1.0e-7
     },
     "fluent_work_dir": "results/experiments/optimizer_comparison/two-param-runs/NM_BO_2D_ph2800",
     "results_dir": "results/experiments/optimizer_comparison/two-param-runs/NM_BO_2D_ph2800",
