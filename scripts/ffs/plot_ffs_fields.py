@@ -14,6 +14,8 @@ Configuration is stored outside this script. Each config file defines:
 - which simulation/DNS field pairs to compare
 - optional ``plots.normalized_error`` common-grid settings and the subset of
   comparison aliases that contribute to the field-only objective
+- optional top-level ``style`` settings for figure size, font sizes, and
+  colorbar size/spacing
 - optional root-relative ``output_dir``. Without it, the output folder name is
   used under ``scripts/ffs/plots/<name>/``
 
@@ -55,6 +57,147 @@ SIM_CMAP = "viridis"
 DNS_CMAP = "viridis"
 ERROR_CMAP = "coolwarm"
 FIELD_LEVELS = 100
+
+DEFAULT_PLOT_STYLE = {
+    "single_figure_size": [12, 8],
+    "comparison_figure_size": [20, 6],
+    "dpi": 200,
+    "font_size": None,
+    "title_size": None,
+    "axis_label_size": None,
+    "tick_label_size": None,
+    "colorbar_label_size": None,
+    "colorbar_tick_size": None,
+    "colorbar_shrink": None,
+    "colorbar_fraction": None,
+    "colorbar_pad": None,
+    "colorbar_aspect": None,
+}
+
+
+def _positive_float(value: object, *, name: str, allow_zero: bool = False) -> float:
+    result = float(value)
+    if allow_zero:
+        valid = result >= 0.0
+    else:
+        valid = result > 0.0
+    if not valid:
+        relation = "non-negative" if allow_zero else "positive"
+        raise ValueError(f"style.{name} must be {relation}.")
+    return result
+
+
+def _figure_size(value: object, *, name: str) -> tuple[float, float]:
+    if not isinstance(value, list | tuple) or len(value) != 2:
+        raise TypeError(f"style.{name} must be a two-item list: [width, height].")
+    width = _positive_float(value[0], name=f"{name}[0]")
+    height = _positive_float(value[1], name=f"{name}[1]")
+    return (width, height)
+
+
+def _plot_style(cfg: dict) -> dict:
+    """Return validated plotting style while preserving historical defaults."""
+
+    style = dict(DEFAULT_PLOT_STYLE)
+    configured = cfg.get("style", {})
+    if configured:
+        if not isinstance(configured, dict):
+            raise TypeError("Top-level style settings must be a JSON object.")
+        unknown = sorted(set(configured) - set(DEFAULT_PLOT_STYLE))
+        if unknown:
+            raise ValueError(f"Unknown style setting(s): {unknown}")
+        style.update(configured)
+
+    font_size = style.get("font_size")
+    if font_size is not None:
+        font_size = _positive_float(font_size, name="font_size")
+        style["font_size"] = font_size
+        for key in (
+            "title_size",
+            "axis_label_size",
+            "tick_label_size",
+            "colorbar_label_size",
+            "colorbar_tick_size",
+        ):
+            if style.get(key) is None:
+                style[key] = font_size
+
+    for key in (
+        "title_size",
+        "axis_label_size",
+        "tick_label_size",
+        "colorbar_label_size",
+        "colorbar_tick_size",
+        "colorbar_shrink",
+        "colorbar_fraction",
+        "colorbar_aspect",
+    ):
+        if style.get(key) is not None:
+            style[key] = _positive_float(style[key], name=key)
+
+    if style.get("colorbar_pad") is not None:
+        style["colorbar_pad"] = _positive_float(
+            style["colorbar_pad"],
+            name="colorbar_pad",
+            allow_zero=True,
+        )
+
+    style["single_figure_size"] = _figure_size(
+        style["single_figure_size"],
+        name="single_figure_size",
+    )
+    style["comparison_figure_size"] = _figure_size(
+        style["comparison_figure_size"],
+        name="comparison_figure_size",
+    )
+    style["dpi"] = int(_positive_float(style["dpi"], name="dpi"))
+    return style
+
+
+def _apply_axes_style(ax: plt.Axes, style: dict) -> None:
+    title_size = style.get("title_size")
+    if title_size is not None:
+        ax.title.set_fontsize(title_size)
+
+    axis_label_size = style.get("axis_label_size")
+    if axis_label_size is not None:
+        ax.xaxis.label.set_fontsize(axis_label_size)
+        ax.yaxis.label.set_fontsize(axis_label_size)
+
+    tick_label_size = style.get("tick_label_size")
+    if tick_label_size is not None:
+        ax.tick_params(axis="both", labelsize=tick_label_size)
+
+
+def _add_colorbar(
+    fig: plt.Figure,
+    mappable,
+    ax: plt.Axes,
+    *,
+    label: str,
+    style: dict,
+) -> None:
+    kwargs = {}
+    for style_key, colorbar_key in (
+        ("colorbar_shrink", "shrink"),
+        ("colorbar_fraction", "fraction"),
+        ("colorbar_pad", "pad"),
+        ("colorbar_aspect", "aspect"),
+    ):
+        value = style.get(style_key)
+        if value is not None:
+            kwargs[colorbar_key] = value
+
+    cbar = fig.colorbar(mappable, ax=ax, **kwargs)
+    label_size = style.get("colorbar_label_size")
+    if label_size is None:
+        cbar.set_label(label)
+    else:
+        cbar.set_label(label, fontsize=label_size)
+
+    tick_size = style.get("colorbar_tick_size")
+    if tick_size is not None:
+        cbar.ax.tick_params(labelsize=tick_size)
 
 
 def load_ascii(path: Path) -> pd.DataFrame:
@@ -160,16 +303,18 @@ def _plot_scatter_field(
     cbar_label: str,
     output_path: Path,
     cmap: str,
+    style: dict,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=style["single_figure_size"])
     scatter = ax.scatter(x, y, c=values, cmap=cmap, s=4, marker=".")
     ax.set_title(title)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_aspect("equal")
-    fig.colorbar(scatter, ax=ax, label=cbar_label)
+    _apply_axes_style(ax, style)
+    _add_colorbar(fig, scatter, ax, label=cbar_label, style=style)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=style["dpi"])
     plt.close(fig)
 
 
@@ -181,20 +326,22 @@ def _plot_tri_field(
     cbar_label: str,
     output_path: Path,
     cmap: str,
+    style: dict,
 ) -> None:
     point_mask = ~np.isfinite(values)
     tri = _triangulation_with_mask(x, y, point_mask)
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=style["single_figure_size"])
     contour = ax.tricontourf(tri, np.ma.masked_invalid(values), levels=FIELD_LEVELS, cmap=cmap)
     ax.set_title(title)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True)
-    fig.colorbar(contour, ax=ax, label=cbar_label)
+    _apply_axes_style(ax, style)
+    _add_colorbar(fig, contour, ax, label=cbar_label, style=style)
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    fig.savefig(output_path, dpi=style["dpi"], bbox_inches="tight")
     plt.close(fig)
 
 
@@ -260,6 +407,7 @@ def _plot_comparison(
     sim_name: str,
     dns_name: str,
     output_path: Path,
+    style: dict,
 ) -> None:
     """Plot simulation, interpolated DNS, and their error on one figure."""
 
@@ -292,7 +440,12 @@ def _plot_comparison(
     error_limit = float(np.max(valid_error))
     error_norm = mcolors.TwoSlopeNorm(vcenter=0.0, vmin=-error_limit, vmax=error_limit)
 
-    fig, axs = plt.subplots(1, 3, figsize=(20, 6), constrained_layout=True)
+    fig, axs = plt.subplots(
+        1,
+        3,
+        figsize=style["comparison_figure_size"],
+        constrained_layout=True,
+    )
 
     sim_plot = axs[0].tricontourf(
         tri,
@@ -305,7 +458,8 @@ def _plot_comparison(
     axs[0].set_xlabel("x")
     axs[0].set_ylabel("y")
     axs[0].set_aspect("equal", adjustable="box")
-    fig.colorbar(sim_plot, ax=axs[0], label=sim_name)
+    _apply_axes_style(axs[0], style)
+    _add_colorbar(fig, sim_plot, axs[0], label=sim_name, style=style)
 
     dns_plot = axs[1].tricontourf(
         tri,
@@ -318,7 +472,8 @@ def _plot_comparison(
     axs[1].set_xlabel("x")
     axs[1].set_ylabel("y")
     axs[1].set_aspect("equal", adjustable="box")
-    fig.colorbar(dns_plot, ax=axs[1], label=dns_name)
+    _apply_axes_style(axs[1], style)
+    _add_colorbar(fig, dns_plot, axs[1], label=dns_name, style=style)
 
     error_plot = axs[2].tricontourf(
         tri,
@@ -331,9 +486,10 @@ def _plot_comparison(
     axs[2].set_xlabel("x")
     axs[2].set_ylabel("y")
     axs[2].set_aspect("equal", adjustable="box")
-    fig.colorbar(error_plot, ax=axs[2], label="Difference")
+    _apply_axes_style(axs[2], style)
+    _add_colorbar(fig, error_plot, axs[2], label="Difference", style=style)
 
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    fig.savefig(output_path, dpi=style["dpi"], bbox_inches="tight")
     plt.close(fig)
 
     valid_error = error[np.isfinite(error)]
@@ -405,6 +561,7 @@ def _plot_normalized_error(
     output_path: Path,
     settings: dict,
     norm: str,
+    style: dict,
 ) -> float:
     """Plot the signed pointwise error used by the common-grid objective."""
 
@@ -440,7 +597,7 @@ def _plot_normalized_error(
     levels = np.linspace(vmin, vmax, FIELD_LEVELS)
     tri = _triangulation_with_mask(grid[:, 0], grid[:, 1])
 
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=style["single_figure_size"])
     contour = ax.tricontourf(
         tri,
         normalized_error,
@@ -457,9 +614,16 @@ def _plot_normalized_error(
     ax.set_ylabel("y")
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True)
-    fig.colorbar(contour, ax=ax, label="(simulation - DNS) / std(DNS)")
+    _apply_axes_style(ax, style)
+    _add_colorbar(
+        fig,
+        contour,
+        ax,
+        label="(simulation - DNS) / std(DNS)",
+        style=style,
+    )
     fig.tight_layout()
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    fig.savefig(output_path, dpi=style["dpi"], bbox_inches="tight")
     plt.close(fig)
 
     return field_score
@@ -512,6 +676,7 @@ def main() -> None:
 
     config_name = cfg["name"]
     output_dir = _resolve_output_dir(cfg, config_name)
+    style = _plot_style(cfg)
 
     sim_path = _resolve_path(cfg["simulation"]["path"])
     dns_path = _resolve_path(cfg["dns"]["path"])
@@ -570,6 +735,7 @@ def main() -> None:
             cbar_label=field_name,
             output_path=output_path,
             cmap=SIM_CMAP,
+            style=style,
         )
         print(f"Saved {output_path}")
 
@@ -583,6 +749,7 @@ def main() -> None:
             cbar_label=field_name,
             output_path=output_path,
             cmap=DNS_CMAP,
+            style=style,
         )
         print(f"Saved {output_path}")
 
@@ -630,6 +797,7 @@ def main() -> None:
             sim_name=sim_name,
             dns_name=dns_name,
             output_path=output_path,
+            style=style,
         )
         print(f"Saved {output_path}")
 
@@ -650,6 +818,7 @@ def main() -> None:
                     output_path=normalized_path,
                     settings=normalized_settings,
                     norm=norm,
+                    style=style,
                 )
                 print(
                     f"{sim_name} normalized {norm.upper()} field contribution: "

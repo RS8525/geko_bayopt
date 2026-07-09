@@ -1,6 +1,15 @@
 {
   "name": "ffs_re3000_all_param_final_optimized_geko",
   "output_dir": "results/ffs_final_runs/all_param_runs/ffs_re3000_all_param_final/plots/optimized_geko",
+  "style": {
+    "font_size": 14,
+    "title_size": 16,
+    "axis_label_size": 16,
+    "colorbar_label_size": 14,
+    "colorbar_shrink": 0.4,
+    "colorbar_fraction": 0.04,
+    "colorbar_pad": 0.02
+  },
   "simulation": {
     "path": "results/ffs_final_runs/all_param_runs/ffs_re3000_all_param_final/ffs_Reh3000_Csep1.4807_Cnw0.5081_Cmix0.9028_Cjet0.977_Cturb1.5.ascii",
     "x_column": "x-coordinate",
@@ -67,3 +76,4 @@
     }
   }
 }
+

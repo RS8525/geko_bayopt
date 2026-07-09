@@ -247,6 +247,7 @@ These are baked into `fluent/`:
 - `scripts/ffs/recompute_all_param_cjet_scores.py` corrects all-param final-run metadata scores after a GEKO `C_JET` default change; it is dry-run by default and only rewrites optimizer-row scores when run with `--write`.
 - Configuration lives in `scripts/ffs/plots/*.json`; final-run reusable configs live in `scripts/ffs/plots/final/*.json`. Figures are written to `scripts/ffs/plots/<config-name>/`.
 - Plot configs may set a repo-root-relative `output_dir`; final-run configs write plots into each run bundle below `results/ffs_final_runs/.../plots/`.
+- Plot configs may define a top-level `style` block for figure size, font sizes, and colorbar shrink/fraction/padding; configs without it keep Matplotlib's historical defaults.
 - Simulation and DNS columns are selected by exported header strings; legacy numeric simulation indices are still accepted.
 - Normalized-error plots use the common-grid objective path and can report both L1 and L2 field contributions via `plots.normalized_error.norms`.
 - Fixed normalized-error color scales are configured with `plots.normalized_error.error_limits`, either globally or per field/pair, so default-GEKO and optimized-GEKO plots can be compared directly.

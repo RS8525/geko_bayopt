@@ -1,6 +1,15 @@
 {
   "name": "ffs_re2000_csep_cnw_final_optimized_geko",
   "output_dir": "results/ffs_final_runs/two-param-runs/ffs_re2000_csep_cnw_final/plots/optimized_geko",
+  "style": {
+    "font_size": 14,
+    "title_size": 16,
+    "axis_label_size": 16,
+    "colorbar_label_size": 14,
+    "colorbar_shrink": 0.4,
+    "colorbar_fraction": 0.04,
+    "colorbar_pad": 0.02
+  },
   "simulation": {
     "path": "results/ffs_final_runs/two-param-runs/ffs_re2000_csep_cnw_final/ffs_Reh2000_Csep1.2094_Cnw0.4968.ascii",
     "x_column": "x-coordinate",
@@ -67,3 +76,4 @@
     }
   }
 }
+
