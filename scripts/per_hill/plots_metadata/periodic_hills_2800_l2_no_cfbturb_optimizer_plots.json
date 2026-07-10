@@ -1,0 +1,16 @@
+{
+  "experiment_config": "configs/periodic_hills_2800/periodic_hills_2800_l2_no_cfbturb.json",
+  "coefficients": ["geko_csep", "geko_cnw", "geko_cmix", "geko_cjet"],
+  "plots": {
+    "performance": true,
+    "one_d": true,
+    "two_d": true,
+    "ecdf": true
+  },
+  "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2_no_cfbturb/plots",
+  "output_folders": {
+    "performance": "Optz performance",
+    "one_d": "1d Coefs vs Score",
+    "two_d": "2d Coefs vs Score"
+    }
+}

@@ -12,7 +12,7 @@ each plotted field, the optional output directory, as well as the plotting optio
 For each selected field, the script can generate:
     1. comparison plots between DNS and the optimized simulation;
     2. comparison plots between the fixed GEKO default solution and the optimized simulation;
-    3. optional error plots, where the reference field is interpolated onto the
+    3. error plots, where the reference field is interpolated onto the
        simulation points before computing simulation - reference;
     4. optional vertical profiles at the x-locations specified in the JSON.
 
@@ -26,15 +26,12 @@ Relevant JSON plotting switches:
         If true, the optimized simulation is also compared against the GEKO default file.
         If false, only the DNS comparison is generated.
 
-    include_error:
-        If true, an additional error panel is included in each comparison plot.
-        The error is computed after interpolating DNS/default values onto the simulation grid.
-        For each field, error panels share one symmetric color scale across
-        simulation/default comparisons.
-
     normalize_error:
         If true (default), error panels show (simulation - reference) / std(reference)
         so fields with different units/magnitudes can share a meaningful scale.
+
+    mask_hill:
+        If true, points below the periodic-hill surface are hidden.
 
 Ex.
 {
@@ -80,8 +77,8 @@ Ex.
     "x_tol": 0.1,
     "make_profiles": true,
     "compare_default": true,
-    "include_error": true,
-    "normalize_error": true
+    "normalize_error": true,
+    "mask_hill": true
   }
 }
 
@@ -92,6 +89,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -107,6 +105,10 @@ from scipy.interpolate import griddata
 REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+
+from geko_bayesopt.objective.field_error import hill_surface
+
 DEFAULT_CONFIG_PATH = os.path.join(
     REPO_ROOT, "scripts", "per_hill", "plots", "plot_config_2800.json"
 )
@@ -123,6 +125,12 @@ def load_config(config_path):
 
 
 def read_table(path):
+    path = Path(path)
+    with path.open("r", encoding="utf-8", errors="ignore") as fh:
+        first_line = fh.readline()
+
+    if path.suffix.lower() == ".csv" or "," in first_line:
+        return pd.read_csv(path, skipinitialspace=True)
     return pd.read_csv(path, sep=r"\s+", engine="python", skipinitialspace=True)
 
 
@@ -130,6 +138,19 @@ def get_column(df, col):
     if isinstance(col, int):
         return df.iloc[:, col].to_numpy(dtype=float)
     return df[col].to_numpy(dtype=float)
+
+
+def hill_keep_mask(x, y, domain_length=9.0):
+    y_surf = hill_surface(np.asarray(x, dtype=float), domain_length)
+    return np.asarray(y, dtype=float) >= (y_surf - 1e-6)
+
+
+def apply_hill_mask(data, *, domain_length=9.0):
+    keep = hill_keep_mask(data["x"], data["y"], domain_length)
+    return {
+        name: values[keep] if len(values) == len(keep) else values
+        for name, values in data.items()
+    }
 
 
 def plot_field(ax, x, y, values, cmap='viridis', vmin=None, vmax=None):
@@ -354,6 +375,27 @@ def stitch_images(image_paths, output_path, layout="horizontal"):
     canvas.save(output_path)
 
 
+def shared_field_limits(fields, ref, sim, default=None):
+    """Return one shared min/max per field across the available datasets."""
+    limits = {}
+    for field in fields:
+        values = [ref[field], sim[field]]
+        if default is not None:
+            values.append(default[field])
+
+        all_values = []
+        for arr in values:
+            arr = np.asarray(arr, dtype=float)
+            all_values.append(arr[np.isfinite(arr)])
+
+        combined = np.concatenate(all_values) if all_values else np.array([])
+        if combined.size == 0:
+            limits[field] = (0.0, 1.0)
+        else:
+            limits[field] = (float(combined.min()), float(combined.max()))
+    return limits
+
+
 def save_comparison_list(
     *,
     case_name,
@@ -363,7 +405,6 @@ def save_comparison_list(
     ref,
     sim,
     output_path,
-    include_error=True,
     layout="horizontal",
     vmin=None,
     vmax=None,
@@ -404,18 +445,17 @@ def save_comparison_list(
         )
         image_paths.append(sim_path)
 
-        if include_error:
-            err_path = tmp / f"03_error_{field}.png"
-            save_error_plot(
-                f"Error {sim_label} - DNS",
-                ref,
-                sim,
-                field,
-                err_path,
-                error_limit=error_limit,
-                normalize=normalize_error,
-            )
-            image_paths.append(err_path)
+        err_path = tmp / f"03_error_{field}.png"
+        save_error_plot(
+            f"Error {sim_label} - DNS",
+            ref,
+            sim,
+            field,
+            err_path,
+            error_limit=error_limit,
+            normalize=normalize_error,
+        )
+        image_paths.append(err_path)
 
         stitch_images(image_paths, output_path, layout=layout)
 
@@ -427,13 +467,24 @@ def _repo_path(path: str | Path) -> Path:
 
 
 def _read_table(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path, sep=r"\s+", engine="python", skipinitialspace=True)
+    return read_table(path)
 
 
 def _col(df: pd.DataFrame, col):
     if isinstance(col, int):
         return df.iloc[:, col]
     return df[col]
+
+
+def _apply_hill_mask_frame(
+    df: pd.DataFrame,
+    x_col,
+    y_col,
+    *,
+    domain_length=9.0,
+) -> pd.DataFrame:
+    keep = hill_keep_mask(_col(df, x_col), _col(df, y_col), domain_length)
+    return df.loc[keep].copy()
 
 
 def load_profile_data(sim_cfg: dict, dns_cfg: dict, default_cfg: dict | None = None):
@@ -501,7 +552,7 @@ def plot_profiles(
                 color="tab:red",
                 linewidth=1.5,
                 alpha=0.7,
-                label="Simulation",
+                label="Optimized",
             )
             ax.plot(
                 _col(dns_slice, dns_col),
@@ -584,27 +635,32 @@ def main():
 
     compare_default = bool(plots_cfg.get("compare_default", False))
     default_cfg = build_default_cfg(cfg, sim_cfg, compare_default)
-    include_error = bool(plots_cfg.get("include_error", True))
     make_profiles = bool(plots_cfg.get("make_profiles", bool(plots_cfg.get("x_locations", []))))
     layout = plots_cfg.get("comparison_layout", "horizontal")
+    mask_hill = bool(plots_cfg.get("mask_hill", cfg.get("mask_hill", False)))
 
     dns = load_dns_data(dns_cfg)
     sim = load_sim_data(sim_cfg)
     default = load_sim_data(default_cfg) if compare_default else None
+    if mask_hill:
+        dns = apply_hill_mask(dns)
+        sim = apply_hill_mask(sim)
+        if default is not None:
+            default = apply_hill_mask(default)
+    field_limits = shared_field_limits(fields, dns, sim, default)
     normalize_error = bool(plots_cfg.get("normalize_error", True))
-    error_limits = {}
-    if include_error:
-        error_comparisons = [(dns, sim)]
-        if compare_default and default is not None:
-            error_comparisons.append((dns, default))
-        error_limits = common_error_limits_by_field(
-            error_comparisons,
-            fields,
-            normalize=normalize_error,
-        )
+    error_comparisons = [(dns, sim)]
+    if compare_default and default is not None:
+        error_comparisons.append((dns, default))
+    error_limits = common_error_limits_by_field(
+        error_comparisons,
+        fields,
+        normalize=normalize_error,
+    )
 
     for field in fields:
         compare_path = simulation_directory / f"Sim_DNS_{cfg['name']}_{field}.png"
+        lo, hi = field_limits[field]
         save_comparison_list(
             case_name=cfg["name"],
             field=field,
@@ -613,8 +669,9 @@ def main():
             ref=dns,
             sim=sim,
             output_path=compare_path,
-            include_error=include_error,
             layout=layout,
+            vmin=lo,
+            vmax=hi,
             error_limit=error_limits.get(field),
             normalize_error=normalize_error,
         )
@@ -630,8 +687,9 @@ def main():
                 ref=dns,
                 sim=default,
                 output_path=compare_default_path,
-                include_error=include_error,
                 layout=layout,
+                vmin=lo,
+                vmax=hi,
                 error_limit=error_limits.get(field),
                 normalize_error=normalize_error,
             )
@@ -643,6 +701,23 @@ def main():
             dns_cfg,
             default_cfg if compare_default else None,
         )
+        if mask_hill:
+            sim_df = _apply_hill_mask_frame(
+                sim_df,
+                sim_cfg["x"],
+                sim_cfg["y"],
+            )
+            dns_df = _apply_hill_mask_frame(
+                dns_df,
+                dns_cfg["x"],
+                dns_cfg["y"],
+            )
+            if default_df is not None and default_cfg is not None:
+                default_df = _apply_hill_mask_frame(
+                    default_df,
+                    default_cfg["x"],
+                    default_cfg["y"],
+                )
         plot_profiles(
             x_locations=plots_cfg["x_locations"],
             fields=fields,

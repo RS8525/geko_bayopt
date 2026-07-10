@@ -1,0 +1,16 @@
+{
+  "experiment_config": "configs/periodic_hills_5600/alph10-9-3036_2coeffs.json",
+  "coefficients": ["geko_csep", "geko_cnw"],
+  "plots": {
+    "performance": true,
+    "one_d": true,
+    "two_d": true,
+    "ecdf": true
+  },
+  "output_dir": "results/periodic_hills/periodic_hill_5600/alph10-9-3036_2coeffs/plots",
+  "output_folders": {
+    "performance": "Optz performance",
+    "one_d": "1d Coefs vs Score",
+    "two_d": "2d Coefs vs Score"
+    }
+}

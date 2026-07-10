@@ -5,7 +5,7 @@
     "performance": true,
     "one_d": true,
     "two_d": true,
-    "histogram": true
+    "ecdf": true
   },
   "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2/plots",
   "output_folders": {

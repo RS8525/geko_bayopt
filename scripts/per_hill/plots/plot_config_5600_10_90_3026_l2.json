@@ -1,0 +1,44 @@
+{
+  "name": "periodic_hills_5600_10_90_3026_120iter",
+  "output_dir": "results/periodic_hills/periodic_hill_5600/alph10-9-3036_120iter/plots",
+  "simulation": {
+    "path": "results/periodic_hills/periodic_hill_5600/alph10-9-3036_120iter/alpha1.0_Re5600_Csep2.1891_Cnw0.4814_Cmix0.3083_Cjet0.9616_Cturb0.5.ascii",
+    "x": 1,
+    "y": 2,
+    "fields": {
+      "Ux": 8,
+      "Uy": 7,
+      "turb-kinetic-energy": 5
+    }
+  },
+  "default": {
+    "path": "results/periodic_hills/periodic_hill_5600/alph10-9-3036_120iter/alpha1.0_Re5600_geko_default.ascii"
+  },
+  "dns": {
+    "path": "data/dns/periodic_hills/pehill-29-cases-DNS/alph10-9-3036/periodic_hill_dns.csv",
+    "x": 0,
+    "y": 1,
+    "fields": {
+      "Ux": 2,
+      "Uy": 3,
+      "turb-kinetic-energy": 4
+    }
+  },
+  "plots": {
+    "fields": [
+      "Ux",
+      "Uy",
+      "turb-kinetic-energy"
+    ],
+    "x_locations": [
+      2.0,
+      4.5,
+      8.0
+    ],
+    "x_tol": 0.05,
+    "make_profiles": true,
+    "compare_default": true,
+    "normalize_error": true,
+    "mask_hill": true
+  }
+}

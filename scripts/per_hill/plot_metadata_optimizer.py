@@ -244,7 +244,7 @@ def plot_1d(df: pd.DataFrame, coefficients: list[str], output_dir: Path, folder_
     return saved
 
 
-def plot_histogram(df: pd.DataFrame, output_dir: Path, metadata_name: str, folder_name: str | None = None) -> list[Path]:
+def plot_ecdf(df: pd.DataFrame, output_dir: Path, metadata_name: str, folder_name: str | None = None) -> list[Path]:
     saved: list[Path] = []
     optimizer_df = df[df["trial_role"] != "baseline"].copy()
     baseline_df = df[df["trial_role"] == "baseline"].copy()
@@ -391,8 +391,8 @@ def main() -> int:
         plot_1d(df, coefficients, output_dir, output_folders.get("one_d"))
     if plots_cfg.get("two_d", True):
         plot_2d(df, coefficients, output_dir, output_folders.get("two_d"))
-    if plots_cfg.get("histogram", False):
-        plot_histogram(df, output_dir, metadata_path.parent.name, output_folders.get("histogram"))
+    if plots_cfg.get("ecdf", False):
+        plot_ecdf(df, output_dir, metadata_path.parent.name, output_folders.get("ecdf"))
 
     print(f"Plots written to {output_dir}")
     return 0

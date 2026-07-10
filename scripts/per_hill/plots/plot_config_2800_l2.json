@@ -44,6 +44,6 @@
     "x_tol": 0.05,
     "make_profiles": true,
     "compare_default": true,
-    "normalize_error": false
+    "normalize_error": true
   }
 }
