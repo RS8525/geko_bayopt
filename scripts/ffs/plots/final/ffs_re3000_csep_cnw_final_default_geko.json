@@ -6,7 +6,7 @@
     "title_size": 16,
     "axis_label_size": 16,
     "colorbar_label_size": 14,
-    "colorbar_shrink": 0.4,
+    "colorbar_shrink": 0.497,
     "colorbar_fraction": 0.04,
     "colorbar_pad": 0.02
   },
@@ -76,4 +76,6 @@
     }
   }
 }
+
+
 
