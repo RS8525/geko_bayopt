@@ -1,5 +1,5 @@
 {
-    "experiment_id": "BO_5D_ph2800_lambda0.35",
+    "experiment_id": "BO_5D_ph2800_lambda0.00",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -33,7 +33,7 @@
         "integral_weights": {},
         "lambda_field": 1.0,
         "lambda_integral": 0.0,
-        "lambda_preference": 0.35
+        "lambda_preference": 0.0
         }
     },
     "optimizer": {
@@ -69,7 +69,6 @@
     },
     "session_strategy": "live",
     "keep_only_best_case_files": true,
-    "fluent_work_dir" : "results/experiments/optimizer_comparison/five-param-runs/BO_5D_ph2800_lambda0.45",
-    "results_dir": "results/experiments/optimizer_comparison/five-param-runs/BO_5D_ph2800_lambda0.45"
-
+    "fluent_work_dir" : "results/experiments/optimizer_comparison/5D-final-runs/BO_5D_ph2800_lambda0.00",
+    "results_dir": "results/experiments/optimizer_comparison/5D-final-runs/BO_5D_ph2800_lambda0.00"
 }
