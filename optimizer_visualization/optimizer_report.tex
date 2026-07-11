@@ -209,6 +209,8 @@ reproducibility and for comparing optimizers on identical initial samples
 of Sobol' samples that precede the first GP proposal (\texttt{n\_initial}
 for \texttt{skopt\_gp}, \texttt{n\_initial\_sobol} for the BO-first hybrids)
 should be roughly $10\,d$ for a $d$-dimensional problem, budget permitting.
+The studies in this report deliberately use large initial-sample counts,
+because a broad initial design was needed to produce stable results.
 Beyond that, every optimizer has method-specific hyperparameters that can
 be tuned to enhance its performance; tuning them was not a focus of this
 work, but we are aware that it can be crucial
@@ -219,10 +221,18 @@ work, but we are aware that it can be crucial
 \label{sec:opt-bo}
 
 Bayesian Optimization from \texttt{scikit-optimize}: a Gaussian-process
-surrogate of the objective (Mat\'ern $\nu = 2.5$ kernel), with Expected
-Improvement as the acquisition function selecting the next evaluation
-point.  The run starts with \texttt{n\_initial} Sobol' quasi-random
-samples, then switches to model-guided proposals.
+surrogate of the objective, with the library's \texttt{gp\_hedge}
+acquisition strategy selecting the next evaluation point.  At every
+iteration \texttt{gp\_hedge} computes three standard acquisition
+functions (lower confidence bound, expected improvement, and probability
+of improvement) and picks one probabilistically, with probabilities
+updated by the gains each function has produced so far, so the balance
+between exploration and exploitation adapts over the run.  The surrogate
+uses the Mat\'ern $\nu = 2.5$ kernel, following the hyperparameter study
+of \cite{bo_hyperparams_ref}, which proposed this kernel for Bayesian
+calibration of turbulence-model coefficients.  The run starts with
+\texttt{n\_initial} Sobol' quasi-random samples, then switches to
+model-guided proposals.
 
 \begin{lstlisting}
 "optimizer": {
@@ -924,7 +934,7 @@ listed here.
 
 \paragraph{Bayesian Optimization.} The GP surrogate of
 Section~\ref{sec:opt-bo} (Mat\'ern kernel with $\nu=2.5$, $10$ restarts of
-the kernel hyperparameter fit, Expected Improvement acquisition).  These
+the kernel hyperparameter fit, \texttt{gp\_hedge} acquisition).  These
 kernel and estimator settings were not tuned for this case; they are
 adopted directly from \cite{bo_hyperparams_ref}.  See
 Section~\ref{sec:outlook} for the corresponding gap in the other
@@ -1261,11 +1271,14 @@ comparison against BO continues in five dimensions
 \section{Extended Study: Five-Coefficient Calibration}
 \label{sec:cfd-5d}
 
-The five-coefficient study compares BO and PSO head-to-head.  Both found
-the minimum in the 1-D and 2-D studies, and both are robust and global
-(BO) or basically global (PSO, Section~\ref{sec:cfd-choice}) methods; a
-further reason to try PSO is the acceleration that its parallelizability
-could yield (Section~\ref{sec:cfd-pso}).  The study runs on the same
+The five-coefficient study first compares BO and PSO head-to-head.  Both
+found the minimum in the 1-D and 2-D studies, and both are robust and
+global (BO) or basically global (PSO, Section~\ref{sec:cfd-choice})
+methods; a further reason to try PSO is the acceleration that its
+parallelizability could yield (Section~\ref{sec:cfd-pso}).
+Section~\ref{sec:cfd-5d-extended} then widens the field again: the two
+local methods join the comparison, and the best PSO configuration is
+rerun with literature-standard hyperparameters.  The study runs on the same
 periodic hills case and the same $L_2$ GEDCP objective
 (Section~\ref{sec:cfd-costfn}), now tuning five GEKO coefficients jointly
 ($\ccorner$ stays at its default):
@@ -1352,6 +1365,95 @@ count, whereas BO's $300$ evaluations are strictly sequential.  Every run
 here is a single seed, so the spread between the PSO variants should be
 read with that caveat.
 
+\subsection{Extended runs: local methods and standard PSO hyperparameters}
+\label{sec:cfd-5d-extended}
+
+Three further runs complete the five-coefficient study: standalone
+Nelder--Mead, standalone finite differences, and a rerun of the
+best-performing PSO configuration with literature-standard
+hyperparameters.  All three use the identical case, objective, and
+$300$-evaluation budget of the runs above.
+
+\paragraph{Why the local methods are included.}
+Restricting the five-coefficient comparison to BO and PSO would rest on
+the a priori argument that only (basically) global methods are trustworthy
+in a larger space, and the lower-dimensional evidence does not support
+that restriction.  Nelder--Mead ties BO's best score in 1-D and achieves
+the best score of all seven strategies in 2-D, and the real objective
+behaves close to unimodal over the tested ranges
+(Section~\ref{sec:cfd-choice}), which is precisely the regime in which a
+local method is competitive.  The location of the 5-D optimum strengthens
+the case further: the best point found by BO and PSO lies near the GEKO
+defaults in three of the five coordinates, and the GEKO defaults are
+exactly where NM and FD start their search
+(Sections~\ref{sec:opt-nm} and~\ref{sec:opt-fd}).  Whether a local search
+from that start reaches $f \approx 1.965$ in far fewer than $300$
+evaluations is therefore a genuinely open question, and one with
+practical value, since NM needs no parallel infrastructure to be cheap.
+FD enters with a known structural handicap that grows with dimension:
+each descent cycle costs $D{+}1 = 6$ evaluations, so its $300$-evaluation
+budget contains only $50$ descent steps.  It is nevertheless run, both
+because it is the study's only gradient-based method and because whether
+the probe overhead or the benign shape of the objective dominates in five
+dimensions is an empirical question the 1-D and 2-D runs cannot answer.
+NM and FD keep their settings from the 2-D study ($\alpha=0.8$,
+$\gamma=1.5$, $\rho=0.5$, $\sigma=0.5$ for NM; \texttt{step\_size}
+$=0.05$ with the 2-D-calibrated \texttt{learning\_rate} $=0.075$ for FD).
+
+\paragraph{Standard PSO hyperparameters.}
+The swarm parameters used so far (Section~\ref{sec:cfd-pso-config}) were
+set empirically and cannot be traced to a published recommendation.  The
+strongest PSO configuration, $15$ particles, is therefore rerun with the
+constricted swarm of Clerc and Kennedy~\cite{clerc2002}, the standard
+parameterization later codified as Standard PSO by Bratton and
+Kennedy~\cite{bratton2007}.  Clerc's stability analysis writes the
+velocity update as
+\[
+v \leftarrow \chi \bigl[ v
+  + c_1 r_1 \,(\mathbf{x}_{pbest} - \mathbf{x})
+  + c_2 r_2 \,(\mathbf{x}_{gbest} - \mathbf{x}) \bigr],
+\qquad
+\chi = \frac{2}{\bigl| 2 - \varphi - \sqrt{\varphi^2 - 4\varphi} \bigr|},
+\quad \varphi = c_1 + c_2,
+\]
+and shows that for $\varphi > 4$ the constriction factor $\chi$
+guarantees non-divergent particle trajectories without any velocity
+clamping.  With the standard choice $\varphi = 4.1$ split equally
+($c_1 = c_2 = 2.05$), $\chi \approx 0.7298$.  The constricted update is
+algebraically identical to the inertia form of
+Section~\ref{sec:opt-pso} with a \emph{constant} inertia weight
+$w = \chi = 0.7298$ and effective attraction coefficients
+$c_1 = c_2 = \chi \cdot 2.05 \approx 1.4962$, which is how the rerun
+configures it ($w_{start} = w_{end} = 0.7298$).  The two values are a
+matched pair from the same derivation and are only standard together:
+combining $w = 0.7298$ with unscaled attraction coefficients, or the
+rescaled coefficients with any other inertia weight, voids the
+convergence guarantee.  No decay schedule and no tight velocity cap
+remain to be justified; following \cite{bratton2007}, the velocity is
+clamped to the full parameter range ($\texttt{v\_max\_frac} = 1.0$) as a
+safeguard only.
+
+This equivalence covers the velocity update rule; the rerun deviates
+from \cite{bratton2007} in three documented respects.  Initialization
+follows the project's comparison framework rather than the standard's
+uniform random draw: particle positions come from a Sobol' sequence with
+zero initial velocities (Section~\ref{sec:opt-pso}), keeping the rerun's
+initial samples bitwise identical to BO's for the shared
+\texttt{random\_state}.  Bounds are handled by absorption
+(Section~\ref{sec:bounds}), where \cite{bratton2007} recommends leaving
+out-of-bounds particles unevaluated.  And the particle count deviates
+from the recommended $50$: both sweeps of Section~\ref{sec:cfd-pso} and
+the head-to-head above show performance degrading with swarm size at a
+fixed budget, so the empirically supported $15$ particles are kept
+($20$ rounds of $15$ evaluations).
+
+\paragraph{Results.}
+\textit{[results pending: the three extended runs had not completed when
+this revision was written]}
+% TODO(user): insert best f + coefficients for NM_5D_ph2800, FD_5D_ph2800,
+% and PSO_5D_ph2800_p15_std (configs/optimizer_comparison_configs/5D/final-runs/)
+% and extend the 5d comparison figures once the runs complete.
+
 % ======================================================================
 \section{Outlook}
 \label{sec:outlook}
@@ -1359,17 +1461,16 @@ read with that caveat.
 Three items remain open before the optimizer story of this project can be
 considered closed:
 
-\paragraph{PSO hyperparameter tuning.}  None of PSO's hyperparameters
-(inertia schedule, cognitive/social coefficients, velocity cap, particle
-count) were systematically tuned for the periodic-hills objective.  The
-values of Section~\ref{sec:cfd-pso-config} were chosen empirically:
-starting from textbook values, they were adjusted once after the 2-D study
-toward a slightly more conservative, less explorative setting (weaker
-attraction coefficients, halved velocity cap, lower final inertia weight)
-and have not been touched since.  Given how directly the particle-count
-sweeps show configuration affecting the reached optimum, a systematic
-hyperparameter search for PSO is the most promising next step; see
-\cite{pso_future_work_ref} for guidance on hyperparameter selection.
+\paragraph{PSO hyperparameter tuning.}  The swarm parameters of the
+sweeps and the first head-to-head (Section~\ref{sec:cfd-pso-config}) were
+chosen empirically, without a citable basis; the standard-parameter rerun
+of Section~\ref{sec:cfd-5d-extended} replaces them with the
+constricted-swarm values of \cite{clerc2002, bratton2007} and removes
+that arbitrariness.  What remains open is tuning \emph{beyond} the
+standard: a problem-specific search over the attraction coefficients,
+swarm size, and inertia handling could well beat the standard values, and
+the particle-count sweeps show how directly such choices affect the
+reached optimum.
 
 \paragraph{PSO parallelization.}  PSO's particles are independent within a
 swarm iteration, and Section~\ref{sec:cfd-5d} shows this parallelism is
@@ -1394,13 +1495,23 @@ the ceiling of what the method can deliver.
 M.\ Breuer, N.\ Peller, Ch.\ Rapp, M.\ Manhart,
 \emph{Flow over periodic hills -- numerical and experimental study in a wide
 range of Reynolds numbers}, Computers \& Fluids, 38(2):433--457, 2009.
-% TODO(user): replace this entry with the actual reference for the paper the
-% BO kernel/estimator hyperparameters (Matern nu=2.5, 10 kernel restarts,
-% Sobol initialization) were adopted from.
 \bibitem{bo_hyperparams_ref}
-\textit{[reference pending -- to be inserted]}
+R.\ McConkey, N.\ Kalia, E.\ Yee, F.-S.\ Lien,
+\emph{turbo-RANS: straightforward and efficient Bayesian optimization of
+turbulence model coefficients}, arXiv:2311.15840, 2023.
+\url{https://doi.org/10.48550/arXiv.2311.15840}
+\bibitem{clerc2002}
+M.\ Clerc, J.\ Kennedy,
+\emph{The particle swarm -- explosion, stability, and convergence in a
+multidimensional complex space}, IEEE Transactions on Evolutionary
+Computation, 6(1):58--73, 2002.
+\bibitem{bratton2007}
+D.\ Bratton, J.\ Kennedy,
+\emph{Defining a standard for particle swarm optimization},
+Proceedings of the IEEE Swarm Intelligence Symposium (SIS 2007),
+pp.\ 120--127, 2007.
 % TODO(user): replace this entry with the actual reference for the PSO
-% parallelization / hyperparameter-tuning paper.
+% parallelization paper.
 \bibitem{pso_future_work_ref}
 \textit{[reference pending -- to be inserted]}
 \end{thebibliography}

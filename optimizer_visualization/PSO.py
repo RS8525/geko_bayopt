@@ -11,9 +11,11 @@ inertia, cognitive + social attraction, velocity clamping and absorption at
 the domain bounds.  The focus here is clarity, not optimization performance.
 
 The benchmark is selectable via ``FUNCTION`` below (rosenbrock, beale or
-goldstein_price).  Figures are written to
-``optimizer_visualization/plots/PSO/<function>/`` as iteration_000.png
-(Initialization), iteration_001.png (Iteration 1), ...
+goldstein_price).  Figures are written to ``optimizer_visualization/plots/PSO/``
+as iteration_000.png, iteration_001.png, ...  After two opening frames, each
+iteration spans two frames so the two PSO phases read apart: the decision
+(velocity arrows from the current positions) and the move (particles at their
+new positions, arrows removed).
 
 Libraries: numpy, matplotlib, scipy only.
 """
@@ -327,28 +329,35 @@ def main() -> None:
     # --- Opening frames: the initial swarm, no direction vectors --------- #
     # First just the particles, then the same frame with the current global
     # best (orange star) revealed.
-    plot_frame(0, positions, gbest_x, steps=None, pbest_x=pbest_x,
+    frame = 0
+    plot_frame(frame, positions, gbest_x, steps=None, pbest_x=pbest_x,
                show_arrows=False, show_gbest=False, show_pbest=False)
-    plot_frame(1, positions, gbest_x, steps=None, pbest_x=pbest_x,
+    frame += 1
+    plot_frame(frame, positions, gbest_x, steps=None, pbest_x=pbest_x,
                show_arrows=False, show_gbest=True, show_pbest=True)
+    frame += 1
 
     # --- Frame loop ------------------------------------------------------ #
-    # Frame t+2 shows the swarm state at step t together with arrows toward
-    # step t+1.  Frames 0-1 (above) are the swarm without arrows; frames
-    # 2..N+2 carry the velocity arrows.
-    for t in range(N_ITERATIONS + 1):
+    # Each iteration is drawn as two frames so its two phases read apart:
+    #   Phase 1 (decision): the current positions with velocity arrows toward
+    #                       the next position; bests unchanged.
+    #   Phase 2 (move):     the particles at their new positions with the
+    #                       arrows removed and personal/global bests refreshed.
+    for t in range(N_ITERATIONS):
         next_pos, next_vel = compute_next(positions, velocities,
                                           pbest_x, gbest_x, rng, t)
         steps = next_pos - positions
 
-        if t % PLOT_EVERY == 0 or t == N_ITERATIONS:
-            plot_frame(t + 2, positions, gbest_x, steps, pbest_x=pbest_x,
-                       show_pbest=(t <= PBEST_LAST_ITER))
+        draw = (t % PLOT_EVERY == 0) or (t == N_ITERATIONS - 1)
+        show_pbest_now = (t <= PBEST_LAST_ITER)
 
-        if t == N_ITERATIONS:
-            break  # final frame only illustrates the next move; do not apply it
+        # Phase 1 - determination of the next position (arrows).
+        if draw:
+            plot_frame(frame, positions, gbest_x, steps, pbest_x=pbest_x,
+                       show_arrows=True, show_pbest=show_pbest_now)
+            frame += 1
 
-        # Apply the exact move that was drawn as arrows.
+        # Apply the exact move that was drawn as arrows, then refresh bests.
         positions  = next_pos
         velocities = next_vel
         values     = objective(positions[:, 0], positions[:, 1])
@@ -361,6 +370,12 @@ def main() -> None:
         if pbest_y[best_i] < gbest_y:
             gbest_y = float(pbest_y[best_i])
             gbest_x = pbest_x[best_i].copy()
+
+        # Phase 2 - the executed move (no arrows), at the new positions.
+        if draw:
+            plot_frame(frame, positions, gbest_x, steps=None, pbest_x=pbest_x,
+                       show_arrows=False, show_pbest=show_pbest_now)
+            frame += 1
 
     print(f"\nDone ({FUNCTION}). Global best value f = {gbest_y:.4g} at "
           f"({gbest_x[0]:.3f}, {gbest_x[1]:.3f}).")
