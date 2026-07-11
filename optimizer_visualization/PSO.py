@@ -12,7 +12,8 @@ the domain bounds.  The focus here is clarity, not optimization performance.
 
 The benchmark is selectable via ``FUNCTION`` below (rosenbrock, beale or
 goldstein_price).  Figures are written to ``optimizer_visualization/plots/PSO/``
-as iteration_000.png, iteration_001.png, ...  After two opening frames, each
+as iteration_000.png, iteration_001.png, ...  After three opening frames
+(the bare landscape, the initial swarm, the swarm with its global best), each
 iteration spans two frames so the two PSO phases read apart: the decision
 (velocity arrows from the current positions) and the move (particles at their
 new positions, arrows removed).
@@ -75,7 +76,7 @@ FUNCTION = "goldstein_price"
 FUNCTION = os.environ.get("PSO_FUNCTION", FUNCTION)  # optional override for batch runs
 
 N_PARTICLES  = 6    # swarm size
-N_ITERATIONS = 20      # number of swarm moves after initialization
+N_ITERATIONS = 10      # number of swarm moves after initialization
 PLOT_EVERY   = 1      # save a figure every PLOT_EVERY-th frame (init + final always)
 PBEST_LAST_ITER = 5   # show per-particle personal-best stars up to this iteration only
 
@@ -207,16 +208,39 @@ def _label_point(ax, xy, label):
                 path_effects=[pe.withStroke(linewidth=2.5, foreground="white")])
 
 
-def plot_frame(frame_idx, positions, gbest_x, steps, pbest_x=None,
-               show_arrows=True, show_gbest=True, show_pbest=True):
-    """Render one PSO frame and save it to OUT_DIR/iteration_%03d.png."""
-    fig, ax = plt.subplots(figsize=FIGSIZE)
-
-    # Objective landscape: filled log-spaced contours + faint isolines.
+def _draw_landscape(ax):
+    """Objective landscape: filled log-spaced contours + faint isolines."""
     ax.contourf(_GX, _GY, _GZ, levels=_LEVELS, norm=LogNorm(),
                 cmap="Blues", alpha=0.75, extend="max")
     ax.contour(_GX, _GY, _GZ, levels=_LEVELS, norm=LogNorm(),
                colors="white", linewidths=0.3, alpha=0.5)
+
+
+def _save_frame(fig, frame_idx):
+    """Save a finished figure to OUT_DIR/iteration_%03d.png and close it."""
+    fig.tight_layout()
+    path = os.path.join(OUT_DIR, f"iteration_{frame_idx:03d}.png")
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"saved {path}")
+
+
+def plot_landscape_frame(frame_idx):
+    """Render the bare cost-function landscape, before any particles exist."""
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    _draw_landscape(ax)
+    ax.set_xlim(X_BOUNDS)
+    ax.set_ylim(Y_BOUNDS)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    _save_frame(fig, frame_idx)
+
+
+def plot_frame(frame_idx, positions, gbest_x, steps, pbest_x=None,
+               show_arrows=True, show_gbest=True, show_pbest=True):
+    """Render one PSO frame and save it to OUT_DIR/iteration_%03d.png."""
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    _draw_landscape(ax)
 
     # Velocity arrows: exact length and direction of the upcoming step.
     if show_arrows:
@@ -300,11 +324,7 @@ def plot_frame(frame_idx, positions, gbest_x, steps, pbest_x=None,
                               label="Next PSO step"))
     ax.legend(handles=handles, loc="upper left", framealpha=0.9)
 
-    fig.tight_layout()
-    path = os.path.join(OUT_DIR, f"iteration_{frame_idx:03d}.png")
-    fig.savefig(path, dpi=150)
-    plt.close(fig)
-    print(f"saved {path}")
+    _save_frame(fig, frame_idx)
 
 
 # --------------------------------------------------------------------------- #
@@ -326,10 +346,13 @@ def main() -> None:
     gbest_x = pbest_x[gbest_i].copy()
     gbest_y = float(pbest_y[gbest_i])
 
-    # --- Opening frames: the initial swarm, no direction vectors --------- #
-    # First just the particles, then the same frame with the current global
-    # best (orange star) revealed.
+    # --- Opening frames -------------------------------------------------- #
+    # First the bare cost-function landscape, then the initial swarm without
+    # direction vectors, then the same frame with the current global best
+    # (orange star) revealed.
     frame = 0
+    plot_landscape_frame(frame)
+    frame += 1
     plot_frame(frame, positions, gbest_x, steps=None, pbest_x=pbest_x,
                show_arrows=False, show_gbest=False, show_pbest=False)
     frame += 1
