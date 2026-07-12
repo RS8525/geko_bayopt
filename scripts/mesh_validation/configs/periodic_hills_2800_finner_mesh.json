@@ -1,5 +1,5 @@
 {
-    "config_file": "configs/periodic_hills_2800/periodic_hills_finner_mesh.json",
+    "config_file": "configs/periodic_hills_2800/mesh_study/periodic_hills_finner_mesh.json",
     "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_finner_mesh/mesh_sensitivity",
 
     "geko_params": {

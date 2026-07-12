@@ -1,87 +1,8 @@
-"""Periodic-hill plotting script for DNS, optimized simulation, and optional GEKO default comparison.
+"""Plot periodic-hill DNS, optimized result, default result, and profiles.
 
-Run from the repository root and pass the plotting config explicitly:
+Run from the repository root:
 
-     python scripts/per_hill/plot_ph_fields_profiles.py scripts/per_hill/plots/<config-name>.json
-
-This script is controlled by an external JSON configuration file. The JSON defines
-the case name, the simulation file, the DNS file, the column indices for x, y, and
-each plotted field, the optional output directory, as well as the plotting options.
-
-
-For each selected field, the script can generate:
-    1. comparison plots between DNS and the optimized simulation;
-    2. comparison plots between the fixed GEKO default solution and the optimized simulation;
-    3. error plots, where the reference field is interpolated onto the
-       simulation points before computing simulation - reference;
-    4. optional vertical profiles at the x-locations specified in the JSON.
-
-
-Relevant JSON plotting switches:
-    make_profiles:
-        If true, profile plots are generated.
-        If false, only field comparison plots are generated.
-
-    compare_default:
-        If true, the optimized simulation is also compared against the GEKO default file.
-        If false, only the DNS comparison is generated.
-
-    normalize_error:
-        If true (default), error panels show (simulation - reference) / std(reference)
-        so fields with different units/magnitudes can share a meaningful scale.
-
-    mask_hill:
-        If true, points below the periodic-hill surface are hidden.
-
-Ex.
-{
-  "name": "periodic_hills_2800_v1",
-  "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_csep_cnw_cmix_cturb/plots",
-  "simulation": {
-    "path": "results/fluent/periodic_hills_2800_v1/alpha1.0_Re2800_Csep0.8792_Cnw0.4893_Cmix0.1918_Cjet0.8705_Cturb1.9724.ascii",
-    "x": 1,
-    "y": 2,
-    "fields": {
-      "Ux": 8,
-      "Uy": 7,
-      "turb-kinetic-energy": 5,
-      "production-of-k": 4,
-      "dissipation": 3
-    }
-  },
-  "dns": {
-    "path": "data/dns/periodic_hills/pehill-2800-Re-DNS/dns_avg_Re2800_columnwise_organized.ascii",
-    "x": 1,
-    "y": 2,
-    "fields": {
-      "Ux": 3,
-      "Uy": 4,
-      "turb-kinetic-energy": 10,
-      "production-of-k": 7,
-      "dissipation": 8
-    }
-  },
-  "plots": {
-    "fields": [
-      "Ux",
-      "Uy",
-      "turb-kinetic-energy",
-      "production-of-k",
-      "dissipation"
-    ],
-    "x_locations": [
-      2.0,
-      4.5,
-      8.0
-    ],
-    "x_tol": 0.1,
-    "make_profiles": true,
-    "compare_default": true,
-    "normalize_error": true,
-    "mask_hill": true
-  }
-}
-
+    python scripts/per_hill/plot_ph_fields_profiles.py scripts/per_hill/plots/<config>.json
 """
 
 from __future__ import annotations
@@ -94,6 +15,7 @@ import tempfile
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
@@ -101,634 +23,405 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import griddata
 
-
-REPO_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..")
-)
-sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from geko_bayesopt.objective.field_error import hill_surface
 
-DEFAULT_CONFIG_PATH = os.path.join(
-    REPO_ROOT, "scripts", "per_hill", "plots", "plot_config_2800.json"
-)
+DEFAULT_CONFIG_PATH = REPO_ROOT / "scripts" / "per_hill" / "plots" / "plot_config_2800.json"
+
+AXIS_LABEL_SIZE = 12
+TITLE_SIZE = 13
+TICK_LABEL_SIZE = 11
+LEGEND_SIZE = 10
 
 
-
-def repo_path(path):
-    return path if os.path.isabs(path) else os.path.join(REPO_ROOT, path)
-
-
-def load_config(config_path):
-    with open(repo_path(config_path), "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def read_table(path):
+def repo_path(path: str | Path) -> Path:
     path = Path(path)
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
+def load_config(path: str | Path) -> dict:
+    with repo_path(path).open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def read_table(path: str | Path) -> pd.DataFrame:
+    path = repo_path(path)
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
         first_line = fh.readline()
-
     if path.suffix.lower() == ".csv" or "," in first_line:
         return pd.read_csv(path, skipinitialspace=True)
     return pd.read_csv(path, sep=r"\s+", engine="python", skipinitialspace=True)
 
 
-def get_column(df, col):
-    if isinstance(col, int):
-        return df.iloc[:, col].to_numpy(dtype=float)
-    return df[col].to_numpy(dtype=float)
+def column(df: pd.DataFrame, col):
+    return df.iloc[:, col] if isinstance(col, int) else df[col]
 
 
-def hill_keep_mask(x, y, domain_length=9.0):
-    y_surf = hill_surface(np.asarray(x, dtype=float), domain_length)
-    return np.asarray(y, dtype=float) >= (y_surf - 1e-6)
+def values(df: pd.DataFrame, col) -> np.ndarray:
+    return column(df, col).to_numpy(dtype=float)
 
 
-def apply_hill_mask(data, *, domain_length=9.0):
-    keep = hill_keep_mask(data["x"], data["y"], domain_length)
+def load_dataset(cfg: dict) -> dict[str, np.ndarray]:
+    df = read_table(cfg["path"])
+    data = {"x": values(df, cfg["x"]), "y": values(df, cfg["y"])}
+    for name, col in cfg["fields"].items():
+        data[name] = values(df, col)
+    return data
+
+
+def apply_hill_mask(data: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    keep = np.asarray(data["y"], dtype=float) >= (hill_surface(data["x"]) - 1e-6)
     return {
-        name: values[keep] if len(values) == len(keep) else values
-        for name, values in data.items()
+        name: arr[keep] if len(arr) == len(keep) else arr
+        for name, arr in data.items()
     }
 
 
-def plot_field(ax, x, y, values, cmap='viridis', vmin=None, vmax=None):
+def mask_frame(df: pd.DataFrame, x_col, y_col) -> pd.DataFrame:
+    keep = np.asarray(column(df, y_col), dtype=float) >= (
+        hill_surface(np.asarray(column(df, x_col), dtype=float)) - 1e-6
+    )
+    return df.loc[keep].copy()
+
+
+def default_cfg(base_cfg: dict, optimized_cfg: dict, compare_default: bool) -> dict | None:
+    if not compare_default:
+        return None
+    cfg = base_cfg.get("default")
+    if cfg is None or not cfg.get("path"):
+        raise ValueError('plots.compare_default is true, so a top-level "default.path" is required.')
+    return {"x": optimized_cfg["x"], "y": optimized_cfg["y"], "fields": optimized_cfg["fields"], **cfg}
+
+
+def triangulated_field(ax, x, y, field, *, cmap, vmin=None, vmax=None):
     triang = tri.Triangulation(x, y)
-
-    # Mask triangles with long edges — these are usually the ones crossing the hill geometry
     tris = triang.triangles
-
-    edge_01 = np.sqrt(
-        (x[tris[:, 0]] - x[tris[:, 1]])**2
-        + (y[tris[:, 0]] - y[tris[:, 1]])**2
-    )
-    edge_12 = np.sqrt(
-        (x[tris[:, 1]] - x[tris[:, 2]])**2
-        + (y[tris[:, 1]] - y[tris[:, 2]])**2
-    )
-    edge_20 = np.sqrt(
-        (x[tris[:, 2]] - x[tris[:, 0]])**2
-        + (y[tris[:, 2]] - y[tris[:, 0]])**2
-    )
-
-    max_edge = np.maximum.reduce([edge_01, edge_12, edge_20])
-
-    triang.set_mask(max_edge > 0.15)
-
-    levels = np.linspace(vmin, vmax, 51) if (vmin is not None and vmax is not None) else 50
-    tcf = ax.tricontourf(triang, values, levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
-    return tcf
+    edges = np.maximum.reduce([
+        np.hypot(x[tris[:, 0]] - x[tris[:, 1]], y[tris[:, 0]] - y[tris[:, 1]]),
+        np.hypot(x[tris[:, 1]] - x[tris[:, 2]], y[tris[:, 1]] - y[tris[:, 2]]),
+        np.hypot(x[tris[:, 2]] - x[tris[:, 0]], y[tris[:, 2]] - y[tris[:, 0]]),
+    ])
+    triang.set_mask(edges > 0.15)
+    levels = np.linspace(vmin, vmax, 51) if vmin is not None and vmax is not None else 50
+    return ax.tricontourf(triang, field, levels=levels, cmap=cmap, vmin=vmin, vmax=vmax)
 
 
-def save_field_plot(x, y, values, title, label, filepath, cmap='viridis', vmin=None, vmax=None):
-    """Renderiza um campo 2D e guarda em ficheiro."""
+def save_field_plot(
+    x,
+    y,
+    field_values,
+    *,
+    title: str,
+    label: str,
+    path: Path,
+    cmap="viridis",
+    vmin=None,
+    vmax=None,
+) -> None:
     fig, ax = plt.subplots(figsize=(10, 6))
-    tcf = plot_field(ax, x, y, values, cmap=cmap, vmin=vmin, vmax=vmax)
-    fig.colorbar(tcf, ax=ax, label=label)
-    ax.set_xlabel('X Coordinate')
-    ax.set_ylabel('Y Coordinate')
-    ax.set_title(title)
+    contour = triangulated_field(ax, x, y, field_values, cmap=cmap, vmin=vmin, vmax=vmax)
+    cbar = fig.colorbar(contour, ax=ax)
+    cbar.set_label(label, fontsize=AXIS_LABEL_SIZE)
+    cbar.ax.tick_params(labelsize=TICK_LABEL_SIZE)
+    ax.set_xlabel("X Coordinate", fontsize=AXIS_LABEL_SIZE)
+    ax.set_ylabel("Y Coordinate", fontsize=AXIS_LABEL_SIZE)
+    ax.set_title(title, fontsize=TITLE_SIZE)
+    ax.tick_params(axis="both", labelsize=TICK_LABEL_SIZE)
     ax.axis("equal")
     ax.grid(True)
-    fig.savefig(filepath)
+    fig.savefig(path)
     plt.close(fig)
 
 
-def load_dns_data(dns_cfg):
-    """Carrega e devolve os campos do ficheiro DNS."""
-    df = read_table(repo_path(dns_cfg["path"]))
-
-    x = get_column(df, dns_cfg["x"])
-    y = get_column(df, dns_cfg["y"])
-
-    out = {"x": x, "y": y}
-
-    for field_name, col in dns_cfg["fields"].items():
-        out[field_name] = get_column(df, col)
-
-    return out
+def interpolate_to_target(ref: dict[str, np.ndarray], target: dict[str, np.ndarray], field: str) -> np.ndarray:
+    points = np.column_stack((ref["x"], ref["y"]))
+    target_points = np.column_stack((target["x"], target["y"]))
+    interp = griddata(points, ref[field], target_points, method="linear")
+    if np.any(~np.isfinite(interp)):
+        nearest = griddata(points, ref[field], target_points, method="nearest")
+        interp = np.where(np.isfinite(interp), interp, nearest)
+    return interp
 
 
-def load_sim_data(sim_cfg):
-    """Carrega e devolve os campos do ficheiro de simulação."""
-    df = read_table(repo_path(sim_cfg["path"]))
-
-    x = get_column(df, sim_cfg["x"])
-    y = get_column(df, sim_cfg["y"])
-
-    out = {"x": x, "y": y}
-
-    for field_name, col in sim_cfg["fields"].items():
-        out[field_name] = get_column(df, col)
-
-    return out
-
-
-def build_default_cfg(cfg, sim_cfg, compare_default):
-    if not compare_default:
-        return None
-
-    default_cfg = cfg.get("default")
-    if default_cfg is None or not default_cfg.get("path"):
-        raise ValueError(
-            "plots.compare_default is true, so the JSON must define "
-            'a top-level "default" block with a "path" entry.'
-        )
-
-    merged = {
-        "x": sim_cfg["x"],
-        "y": sim_cfg["y"],
-        "fields": sim_cfg["fields"],
-    }
-    merged.update(default_cfg)
-    return merged
-
-
-def interpolate_reference_to_sim_grid(ref_x, ref_y, ref_values, sim_x, sim_y):
-    """Interpolate reference values to simulation coordinates for error only."""
-    points = np.column_stack((ref_x, ref_y))
-    target = np.column_stack((sim_x, sim_y))
-
-    ref_on_sim = griddata(points, ref_values, target, method="linear")
-    if np.any(~np.isfinite(ref_on_sim)):
-        nearest = griddata(points, ref_values, target, method="nearest")
-        ref_on_sim = np.where(np.isfinite(ref_on_sim), ref_on_sim, nearest)
-    return ref_on_sim
-
-
-def _safe_std(values):
-    finite = values[np.isfinite(values)]
+def safe_std(values_: np.ndarray) -> float:
+    finite = values_[np.isfinite(values_)]
     if finite.size == 0:
         return 1.0
-    std = float(np.std(finite))
-    return max(std, 1e-8)
+    return max(float(np.std(finite)), 1e-8)
 
 
-def calculate_error_field(ref, sim, field, *, normalize=True):
-    """Return simulation-reference error on the simulation grid.
-
-    When normalize=True, the signed error is divided by the standard
-    deviation of the interpolated reference field. This mirrors the field
-    objective's DNS-standard-deviation normalization and makes different
-    fields comparable on one color scale.
-    """
-    ref_on_sim = interpolate_reference_to_sim_grid(
-        ref["x"], ref["y"], ref[field],
-        sim["x"], sim["y"],
-    )
-    error = sim[field] - ref_on_sim
-    if normalize:
-        error = error / _safe_std(ref_on_sim)
-    return error
+def error_field(ref: dict[str, np.ndarray], opt: dict[str, np.ndarray], field: str, *, normalize: bool) -> np.ndarray:
+    ref_on_opt = interpolate_to_target(ref, opt, field)
+    error = opt[field] - ref_on_opt
+    return error / safe_std(ref_on_opt) if normalize else error
 
 
-def common_error_limits_by_field(comparisons, fields, *, normalize=True):
-    """Find one symmetric color limit per field across requested comparisons."""
+def shared_field_limits(fields: list[str], datasets: list[dict[str, np.ndarray]]) -> dict[str, tuple[float, float]]:
+    limits = {}
+    for field in fields:
+        finite_values = [
+            np.asarray(data[field], dtype=float)[np.isfinite(data[field])]
+            for data in datasets
+            if data is not None and field in data
+        ]
+        combined = np.concatenate(finite_values) if finite_values else np.array([])
+        limits[field] = (0.0, 1.0) if combined.size == 0 else (float(combined.min()), float(combined.max()))
+    return limits
+
+
+def error_limits(
+    fields: list[str],
+    comparisons: list[tuple[dict[str, np.ndarray], dict[str, np.ndarray]]],
+    *,
+    normalize: bool,
+) -> dict[str, float]:
     limits = {}
     for field in fields:
         maxima = []
-        for ref, sim in comparisons:
-            error = calculate_error_field(ref, sim, field, normalize=normalize)
-            finite_abs = np.abs(error[np.isfinite(error)])
-            if finite_abs.size:
-                maxima.append(float(np.max(finite_abs)))
-
-        if not maxima:
-            limits[field] = 1e-12
-            continue
-        limit = max(maxima)
+        for ref, opt in comparisons:
+            err = error_field(ref, opt, field, normalize=normalize)
+            finite = np.abs(err[np.isfinite(err)])
+            if finite.size:
+                maxima.append(float(finite.max()))
+        limit = max(maxima) if maxima else 1e-12
         limits[field] = limit if np.isfinite(limit) and limit > 0.0 else 1e-12
     return limits
 
 
-def save_error_plot(
-    ref_label,
-    ref,
-    sim,
-    field,
-    filepath,
-    *,
-    error_limit=None,
-    normalize=True,
-):
-    """Calculate error using interpolation, then plot with old plot_field()."""
-    error = calculate_error_field(ref, sim, field, normalize=normalize)
-
-    emax = error_limit
-    if emax is None:
-        finite_abs = np.abs(error[np.isfinite(error)])
-        emax = float(np.max(finite_abs)) if finite_abs.size else 1e-12
-    if not np.isfinite(emax) or emax == 0.0:
-        emax = 1e-12
-
-    label = (
-        f"{field} normalized difference"
-        if normalize
-        else f"{field} difference"
-    )
-    save_field_plot(
-        sim["x"],
-        sim["y"],
-        error,
-        title=f"{ref_label} {field}",
-        label=label,
-        filepath=filepath,
-        cmap="coolwarm",
-        vmin=-emax,
-        vmax=emax,
-    )
-
-
-def stitch_images(image_paths, output_path, layout="horizontal"):
-    """Stitch already-rendered old-style PNGs into one comparison image."""
+def stitch(image_paths: list[Path], output_path: Path, *, layout: str) -> None:
     from PIL import Image, ImageOps
 
     images = [Image.open(path).convert("RGB") for path in image_paths]
-
     if layout == "horizontal":
-        max_h = max(img.height for img in images)
-        padded = [
-            ImageOps.expand(img, border=(0, 0, 0, max_h - img.height), fill="white")
-            for img in images
-        ]
-        total_w = sum(img.width for img in padded)
-        canvas = Image.new("RGB", (total_w, max_h), "white")
-        x = 0
+        height = max(img.height for img in images)
+        padded = [ImageOps.expand(img, border=(0, 0, 0, height - img.height), fill="white") for img in images]
+        canvas = Image.new("RGB", (sum(img.width for img in padded), height), "white")
+        offset = 0
         for img in padded:
-            canvas.paste(img, (x, 0))
-            x += img.width
+            canvas.paste(img, (offset, 0))
+            offset += img.width
     else:
-        max_w = max(img.width for img in images)
-        padded = [
-            ImageOps.expand(img, border=(0, 0, max_w - img.width, 0), fill="white")
-            for img in images
-        ]
-        total_h = sum(img.height for img in padded)
-        canvas = Image.new("RGB", (max_w, total_h), "white")
-        y = 0
+        width = max(img.width for img in images)
+        padded = [ImageOps.expand(img, border=(0, 0, width - img.width, 0), fill="white") for img in images]
+        canvas = Image.new("RGB", (width, sum(img.height for img in padded)), "white")
+        offset = 0
         for img in padded:
-            canvas.paste(img, (0, y))
-            y += img.height
+            canvas.paste(img, (0, offset))
+            offset += img.height
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(output_path)
 
 
-def shared_field_limits(fields, ref, sim, default=None):
-    """Return one shared min/max per field across the available datasets."""
-    limits = {}
-    for field in fields:
-        values = [ref[field], sim[field]]
-        if default is not None:
-            values.append(default[field])
-
-        all_values = []
-        for arr in values:
-            arr = np.asarray(arr, dtype=float)
-            all_values.append(arr[np.isfinite(arr)])
-
-        combined = np.concatenate(all_values) if all_values else np.array([])
-        if combined.size == 0:
-            limits[field] = (0.0, 1.0)
-        else:
-            limits[field] = (float(combined.min()), float(combined.max()))
-    return limits
-
-
-def save_comparison_list(
+def save_comparison(
     *,
-    case_name,
-    field,
-    ref_label,
-    sim_label,
-    ref,
-    sim,
-    output_path,
-    layout="horizontal",
-    vmin=None,
-    vmax=None,
-    error_limit=None,
-    normalize_error=True,
-):
-    
-    if vmin is None:
-        vmin = min(ref[field].min(), sim[field].min())
-    if vmax is None:
-        vmax = max(ref[field].max(), sim[field].max())
-
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
-        image_paths = []
-
-        ref_path = tmp / f"01_{ref_label}_{field}.png"
+    ref: dict[str, np.ndarray],
+    opt: dict[str, np.ndarray],
+    field: str,
+    opt_label: str,
+    output_path: Path,
+    vmin: float,
+    vmax: float,
+    error_limit: float,
+    normalize_error: bool,
+    layout: str,
+) -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp = Path(tmp_dir)
+        paths = [
+            tmp / f"01_DNS_{field}.png",
+            tmp / f"02_{opt_label}_{field}.png",
+            tmp / f"03_error_{field}.png",
+        ]
         save_field_plot(
             ref["x"], ref["y"], ref[field],
             title=f"DNS {field}",
             label=field,
-            filepath=ref_path,
-            cmap="viridis",
+            path=paths[0],
             vmin=vmin,
             vmax=vmax,
         )
-        image_paths.append(ref_path)
-
-        sim_path = tmp / f"02_simulation_{field}.png"
         save_field_plot(
-            sim["x"], sim["y"], sim[field],
-            title=f"{sim_label} {field}",
+            opt["x"], opt["y"], opt[field],
+            title=f"{opt_label} {field}",
             label=field,
-            filepath=sim_path,
-            cmap="viridis",
+            path=paths[1],
             vmin=vmin,
             vmax=vmax,
         )
-        image_paths.append(sim_path)
-
-        err_path = tmp / f"03_error_{field}.png"
-        save_error_plot(
-            f"Error {sim_label} - DNS",
-            ref,
-            sim,
-            field,
-            err_path,
-            error_limit=error_limit,
-            normalize=normalize_error,
+        label = f"{field} normalized difference" if normalize_error else f"{field} difference"
+        save_field_plot(
+            opt["x"], opt["y"], error_field(ref, opt, field, normalize=normalize_error),
+            title=f"Error {opt_label} - DNS {field}",
+            label=label,
+            path=paths[2],
+            cmap="coolwarm",
+            vmin=-error_limit,
+            vmax=error_limit,
         )
-        image_paths.append(err_path)
-
-        stitch_images(image_paths, output_path, layout=layout)
+        stitch(paths, output_path, layout=layout)
 
 
-
-def _repo_path(path: str | Path) -> Path:
-    path = Path(path)
-    return path if path.is_absolute() else Path(REPO_ROOT) / path
-
-
-def _read_table(path: Path) -> pd.DataFrame:
-    return read_table(path)
-
-
-def _col(df: pd.DataFrame, col):
-    if isinstance(col, int):
-        return df.iloc[:, col]
-    return df[col]
-
-
-def _apply_hill_mask_frame(
-    df: pd.DataFrame,
-    x_col,
-    y_col,
-    *,
-    domain_length=9.0,
-) -> pd.DataFrame:
-    keep = hill_keep_mask(_col(df, x_col), _col(df, y_col), domain_length)
-    return df.loc[keep].copy()
-
-
-def load_profile_data(sim_cfg: dict, dns_cfg: dict, default_cfg: dict | None = None):
-    sim = _read_table(_repo_path(sim_cfg["path"]))
-    dns = _read_table(_repo_path(dns_cfg["path"]))
-    default = None
-    if default_cfg is not None:
-        default = _read_table(_repo_path(default_cfg["path"]))
-
-    return sim, dns, default
+def load_profile_frames(opt_cfg: dict, dns_cfg: dict, def_cfg: dict | None):
+    opt = read_table(opt_cfg["path"])
+    dns = read_table(dns_cfg["path"])
+    default = read_table(def_cfg["path"]) if def_cfg is not None else None
+    return opt, dns, default
 
 
 def plot_profiles(
+    *,
     x_locations: list[float],
     fields: list[str],
-    sim: pd.DataFrame,
+    opt: pd.DataFrame,
     dns: pd.DataFrame,
-    sim_cfg: dict,
+    opt_cfg: dict,
     dns_cfg: dict,
     output_dir: Path,
     tol: float,
-    default: pd.DataFrame | None = None,
-    default_cfg: dict | None = None,
-    case_name: str | None = None,
+    default: pd.DataFrame | None,
+    default_cfg_: dict | None,
+    case_name: str,
 ) -> None:
-    """
-    Plot horizontal profiles (field vs y) at each x location for each field.
-    Saves one image per field.
-    """
-    unknown_sim = [f for f in fields if f not in sim_cfg["fields"]]
-    unknown_dns = [f for f in fields if f not in dns_cfg["fields"]]
-    if unknown_sim:
-        raise ValueError(f"Unknown simulation fields: {unknown_sim}. Choose from {list(sim_cfg['fields'])}")
-    if unknown_dns:
-        raise ValueError(f"Unknown DNS fields: {unknown_dns}. Choose from {list(dns_cfg['fields'])}")
-
-    n_x = len(x_locations)
-
-    sim_x_col = sim_cfg["x"]
-    sim_y_col = sim_cfg["y"]
-    dns_x_col = dns_cfg["x"]
-    dns_y_col = dns_cfg["y"]
+    missing_opt = [field for field in fields if field not in opt_cfg["fields"]]
+    missing_dns = [field for field in fields if field not in dns_cfg["fields"]]
+    if missing_opt:
+        raise ValueError(f"Unknown optimized fields: {missing_opt}. Choose from {list(opt_cfg['fields'])}")
+    if missing_dns:
+        raise ValueError(f"Unknown DNS fields: {missing_dns}. Choose from {list(dns_cfg['fields'])}")
 
     for field in fields:
-        sim_col = sim_cfg["fields"][field]
-        dns_col = dns_cfg["fields"][field]
-
-        fig, axes = plt.subplots(1, n_x, figsize=(5 * n_x, 4), squeeze=False)
-
-        for col, x_val in enumerate(x_locations):
-            ax = axes[0][col]
-
-            sim_slice = (
-                sim[np.abs(_col(sim, sim_x_col) - x_val) < tol]
-                .sort_values(by=sim_y_col if isinstance(sim_y_col, str) else sim.columns[sim_y_col])
+        fig, axes = plt.subplots(1, len(x_locations), figsize=(5 * len(x_locations), 4), squeeze=False)
+        for idx, x_val in enumerate(x_locations):
+            ax = axes[0][idx]
+            opt_slice = opt[np.abs(column(opt, opt_cfg["x"]) - x_val) < tol].sort_values(
+                by=opt_cfg["y"] if isinstance(opt_cfg["y"], str) else opt.columns[opt_cfg["y"]]
             )
-            dns_slice = (
-                dns[np.abs(_col(dns, dns_x_col) - x_val) < tol]
-                .sort_values(by=dns_y_col if isinstance(dns_y_col, str) else dns.columns[dns_y_col])
+            dns_slice = dns[np.abs(column(dns, dns_cfg["x"]) - x_val) < tol].sort_values(
+                by=dns_cfg["y"] if isinstance(dns_cfg["y"], str) else dns.columns[dns_cfg["y"]]
             )
+            ax.plot(column(opt_slice, opt_cfg["fields"][field]), column(opt_slice, opt_cfg["y"]),
+                    color="tab:red", linewidth=1.5, alpha=0.7, label="Optimized")
+            ax.plot(column(dns_slice, dns_cfg["fields"][field]), column(dns_slice, dns_cfg["y"]),
+                    color="tab:blue", linewidth=1.5, alpha=0.7, label="DNS")
 
-            ax.plot(
-                _col(sim_slice, sim_col),
-                _col(sim_slice, sim_y_col),
-                color="tab:red",
-                linewidth=1.5,
-                alpha=0.7,
-                label="Optimized",
-            )
-            ax.plot(
-                _col(dns_slice, dns_col),
-                _col(dns_slice, dns_y_col),
-                color="tab:blue",
-                linewidth=1.5,
-                alpha=0.7,
-                label="DNS",
-            )
-
-            if default is not None and default_cfg is not None:
-                default_x_col = default_cfg["x"]
-                default_y_col = default_cfg["y"]
-                default_col = default_cfg["fields"][field]
-                default_slice = (
-                    default[np.abs(_col(default, default_x_col) - x_val) < tol]
-                    .sort_values(by=default_y_col if isinstance(default_y_col, str) else default.columns[default_y_col])
+            if default is not None and default_cfg_ is not None:
+                default_slice = default[
+                    np.abs(column(default, default_cfg_["x"]) - x_val) < tol
+                ].sort_values(
+                    by=default_cfg_["y"] if isinstance(default_cfg_["y"], str) else default.columns[default_cfg_["y"]]
                 )
-                ax.plot(
-                    _col(default_slice, default_col),
-                    _col(default_slice, default_y_col),
-                    color="tab:green",
-                    linewidth=1.5,
-                    alpha=0.7,
-                    label="Default",
-                )
+                ax.plot(column(default_slice, default_cfg_["fields"][field]), column(default_slice, default_cfg_["y"]),
+                        color="tab:green", linewidth=1.5, alpha=0.7, label="Default")
 
             ax.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5, linewidth=0.8)
-            ax.set_xlabel(field)
-            ax.set_ylabel("y")
-            ax.set_title(f"{field} — x = {x_val}  (tol = {tol})")
-            ax.legend(fontsize=8)
+            ax.set_xlabel(field, fontsize=AXIS_LABEL_SIZE)
+            ax.set_ylabel("y", fontsize=AXIS_LABEL_SIZE)
+            ax.set_title(f"{field} — x = {x_val}  (tol = {tol})", fontsize=TITLE_SIZE)
+            ax.tick_params(axis="both", labelsize=TICK_LABEL_SIZE)
+            ax.legend(fontsize=LEGEND_SIZE)
             ax.grid(True, alpha=0.3)
 
         fig.tight_layout()
-        if case_name:
-            out_path = output_dir / f"profiles_{case_name}_{field}.png"
-        else:
-            out_path = output_dir / f"{field}_profiles.png"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out_path, dpi=120)
-        print(f"Saved: {out_path}")
+        path = output_dir / f"profiles_{case_name}_{field}.png"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, dpi=120)
+        print(f"Saved: {path}")
         plt.close(fig)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "config",
-        nargs="?",
-        default=DEFAULT_CONFIG_PATH,
-        help="Path to JSON config. Default: scripts/per_hill/plots/plot_config_2800.json",
-    )
+    parser.add_argument("config", nargs="?", default=str(DEFAULT_CONFIG_PATH))
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    plots = cfg["plots"]
+    fields = plots["fields"]
+    opt_cfg = cfg.get("optimized", cfg.get("simulation"))
+    if opt_cfg is None:
+        raise KeyError('JSON must define an "optimized" block.')
 
-    output_dir = cfg.get("output_dir")
-    if output_dir is not None:
-        output_directory = Path(repo_path(output_dir))
-    else:
-        results_dir = cfg.get("results_dir")
-        if results_dir is None:
-            case_name = cfg.get("name", cfg.get("experiment_id", "unknown"))
-            results_dir = os.path.join("results", "experiments", case_name)
-        output_directory = Path(repo_path(results_dir)) / "plots"
+    output_dir = repo_path(cfg.get("output_dir", Path("results") / "experiments" / cfg["name"] / "plots"))
+    opt_dir = output_dir / "optimized"
+    default_dir = output_dir / "default"
+    profiles_dir = output_dir / "profiles"
+    for directory in (opt_dir, default_dir, profiles_dir):
+        directory.mkdir(parents=True, exist_ok=True)
 
-    output_directory.mkdir(parents=True, exist_ok=True)
-    simulation_directory = output_directory / "simulation"
-    default_directory = output_directory / "default"
-    profiles_directory = output_directory / "profiles"
-    simulation_directory.mkdir(parents=True, exist_ok=True)
-    default_directory.mkdir(parents=True, exist_ok=True)
-    profiles_directory.mkdir(parents=True, exist_ok=True)
+    compare_default = bool(plots.get("compare_default", False))
+    def_cfg = default_cfg(cfg, opt_cfg, compare_default)
+    dns = load_dataset(cfg["dns"])
+    opt = load_dataset(opt_cfg)
+    default = load_dataset(def_cfg) if def_cfg is not None else None
 
-    sim_cfg = cfg["simulation"]
-    dns_cfg = cfg["dns"]
-    plots_cfg = cfg["plots"]
-    fields = plots_cfg["fields"]
-
-    compare_default = bool(plots_cfg.get("compare_default", False))
-    default_cfg = build_default_cfg(cfg, sim_cfg, compare_default)
-    make_profiles = bool(plots_cfg.get("make_profiles", bool(plots_cfg.get("x_locations", []))))
-    layout = plots_cfg.get("comparison_layout", "horizontal")
-    mask_hill = bool(plots_cfg.get("mask_hill", cfg.get("mask_hill", False)))
-
-    dns = load_dns_data(dns_cfg)
-    sim = load_sim_data(sim_cfg)
-    default = load_sim_data(default_cfg) if compare_default else None
-    if mask_hill:
+    if bool(plots.get("mask_hill", cfg.get("mask_hill", False))):
         dns = apply_hill_mask(dns)
-        sim = apply_hill_mask(sim)
+        opt = apply_hill_mask(opt)
         if default is not None:
             default = apply_hill_mask(default)
-    field_limits = shared_field_limits(fields, dns, sim, default)
-    normalize_error = bool(plots_cfg.get("normalize_error", True))
-    error_comparisons = [(dns, sim)]
-    if compare_default and default is not None:
-        error_comparisons.append((dns, default))
-    error_limits = common_error_limits_by_field(
-        error_comparisons,
-        fields,
-        normalize=normalize_error,
-    )
+
+    datasets = [dns, opt] + ([default] if default is not None else [])
+    value_limits = shared_field_limits(fields, datasets)
+    normalize_error = bool(plots.get("normalize_error", True))
+    comparisons = [(dns, opt)] + ([(dns, default)] if default is not None else [])
+    err_limits = error_limits(fields, comparisons, normalize=normalize_error)
+    layout = plots.get("comparison_layout", "horizontal")
 
     for field in fields:
-        compare_path = simulation_directory / f"Sim_DNS_{cfg['name']}_{field}.png"
-        lo, hi = field_limits[field]
-        save_comparison_list(
-            case_name=cfg["name"],
-            field=field,
-            ref_label="DNS",
-            sim_label="Simulation",
+        lo, hi = value_limits[field]
+        opt_path = opt_dir / f"Optimized_DNS_{cfg['name']}_{field}.png"
+        save_comparison(
             ref=dns,
-            sim=sim,
-            output_path=compare_path,
-            layout=layout,
+            opt=opt,
+            field=field,
+            opt_label="Optimized",
+            output_path=opt_path,
             vmin=lo,
             vmax=hi,
-            error_limit=error_limits.get(field),
+            error_limit=err_limits[field],
             normalize_error=normalize_error,
+            layout=layout,
         )
-        print(f"Saved: {compare_path}")
+        print(f"Saved: {opt_path}")
 
-        if compare_default:
-            compare_default_path = default_directory / f"Default_DNS_{cfg['name']}_{field}.png"
-            save_comparison_list(
-                case_name=cfg["name"],
-                field=field,
-                ref_label="DNS",
-                sim_label="Default",
+        if default is not None:
+            default_path = default_dir / f"Default_DNS_{cfg['name']}_{field}.png"
+            save_comparison(
                 ref=dns,
-                sim=default,
-                output_path=compare_default_path,
-                layout=layout,
+                opt=default,
+                field=field,
+                opt_label="Default",
+                output_path=default_path,
                 vmin=lo,
                 vmax=hi,
-                error_limit=error_limits.get(field),
+                error_limit=err_limits[field],
                 normalize_error=normalize_error,
+                layout=layout,
             )
-            print(f"Saved: {compare_default_path}")
+            print(f"Saved: {default_path}")
 
+    make_profiles = bool(plots.get("make_profiles", bool(plots.get("x_locations", []))))
     if make_profiles:
-        sim_df, dns_df, default_df = load_profile_data(
-            sim_cfg,
-            dns_cfg,
-            default_cfg if compare_default else None,
-        )
-        if mask_hill:
-            sim_df = _apply_hill_mask_frame(
-                sim_df,
-                sim_cfg["x"],
-                sim_cfg["y"],
-            )
-            dns_df = _apply_hill_mask_frame(
-                dns_df,
-                dns_cfg["x"],
-                dns_cfg["y"],
-            )
-            if default_df is not None and default_cfg is not None:
-                default_df = _apply_hill_mask_frame(
-                    default_df,
-                    default_cfg["x"],
-                    default_cfg["y"],
-                )
+        opt_frame, dns_frame, default_frame = load_profile_frames(opt_cfg, cfg["dns"], def_cfg)
+        if bool(plots.get("mask_hill", cfg.get("mask_hill", False))):
+            opt_frame = mask_frame(opt_frame, opt_cfg["x"], opt_cfg["y"])
+            dns_frame = mask_frame(dns_frame, cfg["dns"]["x"], cfg["dns"]["y"])
+            if default_frame is not None and def_cfg is not None:
+                default_frame = mask_frame(default_frame, def_cfg["x"], def_cfg["y"])
         plot_profiles(
-            x_locations=plots_cfg["x_locations"],
+            x_locations=plots["x_locations"],
             fields=fields,
-            sim=sim_df,
-            dns=dns_df,
-            sim_cfg=sim_cfg,
-            dns_cfg=dns_cfg,
-            output_dir=profiles_directory,
-            tol=plots_cfg["x_tol"],
-            default=default_df if compare_default else None,
-            default_cfg=default_cfg if compare_default else None,
+            opt=opt_frame,
+            dns=dns_frame,
+            opt_cfg=opt_cfg,
+            dns_cfg=cfg["dns"],
+            output_dir=profiles_dir,
+            tol=plots["x_tol"],
+            default=default_frame,
+            default_cfg_=def_cfg,
             case_name=cfg["name"],
         )
 

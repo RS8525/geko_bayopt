@@ -1,7 +1,7 @@
 {
   "name": "periodic_hills_all_coefs_l2_no_cfbturb",
   "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2_no_cfbturb/plots",
-  "simulation": {
+  "optimized": {
     "path": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2_no_cfbturb/alpha1.0_Re2800_Csep0.8609_Cnw0.5209_Cmix0.0525_Cjet0.9702.ascii",
     "x": 1,
     "y": 2,
