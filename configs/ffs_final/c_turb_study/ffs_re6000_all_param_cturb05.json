@@ -35,7 +35,7 @@
     {
       "name": "geko_cjet",
       "low": 0,
-      "high": 2
+      "high": 1.2
     },
     {
       "name": "geko_cturb",
