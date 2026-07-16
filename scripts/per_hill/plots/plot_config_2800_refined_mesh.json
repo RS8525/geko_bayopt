@@ -1,7 +1,7 @@
 {
   "name": "periodic_hills_all_coefs_refined_mesh",
   "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_refined_mesh/plots",
-  "simulation": {
+  "optimized": {
     "path": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_refined_mesh/alpha1.0_Re2800_Csep1.9434_Cnw0.4836_Cmix0.1993_Cjet0.7814_Cturb0.6406.ascii",
     "x": 1,
     "y": 2,

@@ -1,7 +1,7 @@
 {
   "name": "periodic_hills_2coeffs_l2",
   "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_2coeffs_l2/plots",
-  "simulation": {
+  "optimized": {
     "path": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_2coeffs_l2/alpha1.0_Re2800_Csep0.8707_Cnw0.4919.ascii",
     "x": 1,
     "y": 2,

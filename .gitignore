@@ -79,3 +79,6 @@ scripts/ffs/plots/*
 
 # Legacy local plot outputs from the previous helper location
 tests/plots/
+
+# Kept locally only, removed from the repo
+optimizer_visualization/

@@ -1,5 +1,5 @@
 {
-  "experiment_config": "configs/periodic_hills_2800/periodic_hills_2800_l2.json",
+  "experiment_config": "configs/periodic_hills_2800/periodic_hills_2800_l2_2coeffs.json",
   "coefficients": ["geko_csep", "geko_cnw"],
   "plots": {
     "performance": true,
@@ -7,7 +7,7 @@
     "two_d": true,
     "ecdf": true
   },
-  "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_all_coefs_l2/plots",
+  "output_dir": "results/periodic_hills/periodic_hills_2800/periodic_hills_2800_2coeffs_l2/plots",
   "output_folders": {
     "performance": "Optz performance",
     "one_d": "1d Coefs vs Score",
