@@ -1,5 +1,5 @@
 {
-    "experiment_id": "PSO_5D_ph2800_p50",
+    "experiment_id": "PSO_2D_ph2800_p10_std",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -20,10 +20,7 @@
     },
     "parameters": [
         {"name": "geko_csep", "low": 0.7, "high": 2.5},
-        {"name": "geko_cnw", "low": -2.0, "high": 2.0},
-        {"name": "geko_cmix", "low": -0.2, "high": 1.0},
-        {"name": "geko_cturb", "low": 0.5, "high": 2.5},
-        {"name": "geko_cjet", "low": 0.0, "high": 1.2}
+        {"name": "geko_cnw", "low": -2.0, "high": 2.0}
     ],
     "objective": {
     "kind": "gedcp",
@@ -39,16 +36,16 @@
     "optimizer": {
         "kind": "pso",
         "stopping_criteria": {
-            "n_calls": 300,
+            "n_calls": 80,
             "epsilon": null
         },
         "kind_specific_options": {
-            "n_particles": 50,
-            "w_start": 0.9,
-            "w_end": 0.2,
-            "c1": 1.5,
-            "c2": 1.5,
-            "v_max_frac": 0.1,
+            "n_particles": 10,
+            "w_start": 0.7298,
+            "w_end": 0.7298,
+            "c1": 1.49618,
+            "c2": 1.49618,
+            "v_max_frac": 1.0,
             "random_state": 42
         }
     },
@@ -72,9 +69,8 @@
         "k": 1.0e-7,
         "omega": 1.0e-7
     },
+    "fluent_work_dir": "results/experiments/optimizer_comparison/two-param-runs/PSO_2D_ph2800_p10_std",
+    "results_dir": "results/experiments/optimizer_comparison/two-param-runs/PSO_2D_ph2800_p10_std",
     "session_strategy": "live",
-    "keep_only_best_case_files": true,
-    "fluent_work_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p50",
-    "results_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p50"
-
+    "keep_only_best_case_files": true
 }

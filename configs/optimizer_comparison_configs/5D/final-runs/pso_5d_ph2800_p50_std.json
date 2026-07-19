@@ -1,5 +1,5 @@
 {
-    "experiment_id": "PSO_5D_ph2800_p50",
+    "experiment_id": "PSO_5D_ph2800_p50_std",
     "case": {
         "kind": "periodic_hills",
         "options": {
@@ -15,7 +15,7 @@
             "zone_top": "wall",
             "zone_bottom": "wall_lower",
             "geometry_path": "data/geometry/Periodic_Hill_10_90_3035.pmdb",
-            "dns_path": "data/dns/periodic_hills/dns_avg_Re2800_columnwise_organized.ascii"
+            "dns_path":"data/dns/periodic_hills/dns_avg_Re2800_columnwise_organized.ascii"
         }
     },
     "parameters": [
@@ -44,11 +44,11 @@
         },
         "kind_specific_options": {
             "n_particles": 50,
-            "w_start": 0.9,
-            "w_end": 0.2,
-            "c1": 1.5,
-            "c2": 1.5,
-            "v_max_frac": 0.1,
+            "w_start": 0.7298,
+            "w_end": 0.7298,
+            "c1": 1.49618,
+            "c2": 1.49618,
+            "v_max_frac": 1.0,
             "random_state": 42
         }
     },
@@ -74,7 +74,7 @@
     },
     "session_strategy": "live",
     "keep_only_best_case_files": true,
-    "fluent_work_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p50",
-    "results_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p50"
+    "fluent_work_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p50_std",
+    "results_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p50_std"
 
 }

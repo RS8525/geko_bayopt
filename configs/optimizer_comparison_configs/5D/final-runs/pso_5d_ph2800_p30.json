@@ -74,6 +74,6 @@
     },
     "session_strategy": "live",
     "keep_only_best_case_files": true,
-    "fluent_work_dir": "results/experiments/optimizer_comparison/five-param-runs/PSO_5D_ph2800_p30",
-    "results_dir": "results/experiments/optimizer_comparison/five-param-runs/PSO_5D_ph2800_p30"
+    "fluent_work_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p30",
+    "results_dir": "results/experiments/optimizer_comparison/5D-final-runs/PSO_5D_ph2800_p30"
 }

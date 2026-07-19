@@ -118,15 +118,28 @@ CONVERGENCE_COMPARISONS = [
     ConvergenceComparison(
         name="PSOvsPSO",
         title=(
-            "PSO Swarm-Size Comparison - Periodic Hills Re=2800, 5D\n"
-            "(Csep, Cnw, Cmix, Cturb, Cjet)"
+            "PSO Swarm-Size Comparison (conservative hyperparameters)\n"
+            "Periodic Hills Re=2800, 5D (Csep, Cnw, Cmix, Cturb, Cjet)"
         ),
         runs=[
             ("PSO_5D_ph2800_p15",     "PSO; 15 particles"),
             ("PSO_5D_ph2800_p30",     "PSO; 30 particles"),
             ("PSO_5D_ph2800_p50",     "PSO; 50 particles"),
         ],
-        cutoffs=(100, 200, 250),
+        cutoffs=(30, 200, 250),
+    ),
+    ConvergenceComparison(
+        name="PSOvsPSO_std",
+        title=(
+            "PSO Swarm-Size Comparison (standard hyperparameters)\n"
+            "Periodic Hills Re=2800, 5D (Csep, Cnw, Cmix, Cturb, Cjet)"
+        ),
+        runs=[
+            ("PSO_5D_ph2800_p15_std", "PSO; 15 particles (std hypers)"),
+            ("PSO_5D_ph2800_p30_std", "PSO; 30 particles (std hypers)"),
+            ("PSO_5D_ph2800_p50_std", "PSO; 50 particles (std hypers)"),
+        ],
+        cutoffs=(30, 200, 250),
     ),
 ]
 
@@ -147,6 +160,8 @@ _RUN_COLORS = {
     "PSO; 15 particles (std hypers)":             "#9065D0",
     "PSO; 30 particles":                          "#794DB6",
     "PSO; 50 particles":                          "#62359C",
+    "PSO; 30 particles (std hypers)":             "#794DB6",
+    "PSO; 50 particles (std hypers)":             "#62359C",
 }
 
 # Secondary encoding for the PSO family: the purple lightness steps alone are
@@ -157,6 +172,8 @@ _RUN_STYLES = {
     "PSO; 15 particles (std hypers)":  (0, (5, 2)),      # dashed
     "PSO; 30 particles":               (0, (5, 2, 1, 2)),  # dash-dot
     "PSO; 50 particles":               (0, (1, 1.5)),    # dotted
+    "PSO; 30 particles (std hypers)":  (0, (5, 2, 1, 2)),  # dash-dot
+    "PSO; 50 particles (std hypers)":  (0, (1, 1.5)),    # dotted
 }
 
 # Lambda comparison: (run folder, lambda_preference). All final-run configs
@@ -164,7 +181,7 @@ _RUN_STYLES = {
 # configs/optimizer_comparison_configs/5D/final-runs/*.json), so only the
 # preference weight differs per run.
 LAMBDA_RUNS = [
-    ("BO_5D_ph2800_lambda0.00", 0.00),  # pending run; skipped until results exist
+    ("BO_5D_ph2800_lambda0.00", 0.00),
     ("BO_5D_ph2800_lambda0.15", 0.15),
     ("BO_5D_ph2800_lambda0.25", 0.25),
     ("BO_5D_ph2800_lambda0.35", 0.35),
@@ -187,15 +204,17 @@ REFERENCE_COLOR = "#7f7f7f"
 
 # Combined per-slide figures: the single coefficient-over-lambda plots drawn
 # side by side under one common title, as (file slug, title, coefficients).
-# Grouped by whether the optimizer actually moves the coefficient away from
-# its GEKO default (see lambda_comparison_summary.csv).
+# Grouped by whether the optimum responds to lambda_p (see
+# lambda_comparison_summary.csv): csep walks back to its default as lambda_p
+# grows and cnw leaves its default only at lambda_p = 0, while cjet, cmix,
+# and cturb are essentially unaffected by the preference weight.
 LAMBDA_COEFF_GROUPS = [
-    ("cjet_cmix_cnw",
-     r"Coefficients staying close to their defaults",
-     ["geko_cjet", "geko_cmix", "geko_cnw"]),
-    ("cturb_csep",
-     r"Coefficients staying/driven away from their defaults",
-     ["geko_cturb", "geko_csep"]),
+    ("csep_cnw",
+     r"Coefficients responding to the preference weight",
+     ["geko_csep", "geko_cnw"]),
+    ("cjet_cmix_cturb",
+     r"Coefficients insensitive to the preference weight",
+     ["geko_cjet", "geko_cmix", "geko_cturb"]),
 ]
 
 

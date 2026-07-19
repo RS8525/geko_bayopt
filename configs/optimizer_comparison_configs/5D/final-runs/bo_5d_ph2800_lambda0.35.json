@@ -69,7 +69,7 @@
     },
     "session_strategy": "live",
     "keep_only_best_case_files": true,
-    "fluent_work_dir" : "results/experiments/optimizer_comparison/five-param-runs/BO_5D_ph2800_lambda0.35",
-    "results_dir": "results/experiments/optimizer_comparison/five-param-runs/BO_5D_ph2800_lambda0.35"
+    "fluent_work_dir" : "results/experiments/optimizer_comparison/5D-final-runs/BO_5D_ph2800_lambda0.35",
+    "results_dir": "results/experiments/optimizer_comparison/5D-final-runs/BO_5D_ph2800_lambda0.35"
 
 }
