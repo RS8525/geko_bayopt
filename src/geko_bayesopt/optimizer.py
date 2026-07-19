@@ -131,12 +131,10 @@ class NelderMeadOptimizer:
         self.window = window
         self.options = options or {}
 
-        # α = 0.8 (textbook default 1.0): less aggressive reflection reduces
-        # overshoots in the smooth quadratic bowl that the CFD cost approximates.
-        self._ALPHA = float(self.options.get("alpha", 0.8))
-        # γ = 1.5 (textbook default 2.0): less aggressive expansion for the
-        # same reason — exploitation matters more than exploration here.
-        self._GAMMA = float(self.options.get("gamma", 1.5))
+        # Defaults are the canonical textbook coefficients; the comparison
+        # study overrides alpha/gamma in its configs to weight exploitation.
+        self._ALPHA = float(self.options.get("alpha", 1.0))
+        self._GAMMA = float(self.options.get("gamma", 2.0))
         self._RHO   = float(self.options.get("rho",   0.5))
         self._SIGMA = float(self.options.get("sigma",  0.5))
 
@@ -578,13 +576,19 @@ class ParticleSwarmOptimizer:
 
     Optional options (with defaults):
         n_particles : int   – swarm size (default 10)
-        w_start     : float – initial inertia weight (default 0.9)
-        w_end       : float – final inertia weight   (default 0.4)
-        c1          : float – cognitive coefficient  (default 1.5)
-        c2          : float – social coefficient     (default 1.5)
+        w_start     : float – initial inertia weight (default 0.7298)
+        w_end       : float – final inertia weight   (default 0.7298)
+        c1          : float – cognitive coefficient  (default 1.49618)
+        c2          : float – social coefficient     (default 1.49618)
         v_max_frac  : float – v_max as fraction of each dimension's range
-                              (default 0.2)
+                              (default 1.0)
         random_state: int   – RNG seed (default 42)
+
+    The defaults are the constricted-swarm Standard PSO values (Clerc &
+    Kennedy 2002): constant inertia w = chi = 0.7298, c1 = c2 =
+    chi * 2.05, and a full-range velocity cap as a safeguard only.  The
+    comparison study overrides them in its configs with a more
+    conservative set (decaying inertia, tight velocity cap).
 
     Boundary handling: absorption — particles that overshoot a bound are
     placed exactly on it and their velocity in that dimension is zeroed.
@@ -608,11 +612,14 @@ class ParticleSwarmOptimizer:
         self.n_dim   = len(parameters)
 
         self.n_particles = int(opts.get("n_particles", 10))
-        self.w_start     = float(opts.get("w_start",   0.9))
-        self.w_end       = float(opts.get("w_end",     0.4))
-        self.c1          = float(opts.get("c1",        1.5))
-        self.c2          = float(opts.get("c2",        1.5))
-        self.v_max_frac  = float(opts.get("v_max_frac", 0.2))
+        # Defaults follow Standard PSO (Clerc & Kennedy constriction):
+        # constant inertia chi = 0.7298, c1 = c2 = chi * 2.05 = 1.49618,
+        # full-range velocity cap as a safeguard only.
+        self.w_start     = float(opts.get("w_start",   0.7298))
+        self.w_end       = float(opts.get("w_end",     0.7298))
+        self.c1          = float(opts.get("c1",        1.49618))
+        self.c2          = float(opts.get("c2",        1.49618))
+        self.v_max_frac  = float(opts.get("v_max_frac", 1.0))
         # max_iter is derived from the evaluation budget so the inertia decay
         # exactly spans the run: the init sweep costs n_particles evaluations
         # and each swarm iteration costs n_particles more.  test_config checks
